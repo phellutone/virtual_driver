@@ -1,4 +1,4 @@
-from typing import Any, Literal, Union, get_args
+from typing import Any, Literal, Protocol, Union, get_args
 from dataclasses import dataclass
 import bpy
 
@@ -103,15 +103,13 @@ def path_reassembly(id: bpy.types.ID, path: str) -> Union[Reassembly, None]:
     if g2.type == 'path':
         if g1.type == 'int':
             return Reassembly(id, g3.prna if g3 else '', g2.path, g1.path, graph)
-        if g1.type == 'str':
-            return Reassembly(id, g3.prna if g3 else '', g2.path+'['+g1.path+']', 0, graph)
     if g1.type == 'path':
         return Reassembly(id, g2.prna, g1.path, 0, graph)
     return
 
-def animatable(id: bpy.types.ID, path: str) -> Union[tuple[bpy.types.ID, str, int], None]:
+def animatable(id: bpy.types.ID, path: str) -> Union[tuple[bpy.types.ID, str, int, bpy.types.Property], None]:
     pr = path_reassembly(id, path)
-    if not pr:
+    if pr is None:
         return
 
     graph = pr.graph    
@@ -124,18 +122,18 @@ def animatable(id: bpy.types.ID, path: str) -> Union[tuple[bpy.types.ID, str, in
             return
         if prop.is_readonly:
             return
-        if prop.type in ('BOOL', 'INT', 'FLOAT'):
+        if prop.type in ('BOOLEAN', 'INT', 'FLOAT'):
             if prop.is_array:
                 if graph[-1].type == 'int':
-                    return (pr.id, pr.path+'.'+pr.prop, pr.array_index)
+                    return (pr.id, pr.path+'.'+pr.prop, pr.array_index, prop)
                 else:
                     return
-        return (pr.id, pr.path+'.'+pr.prop, pr.array_index)
+        return (pr.id, pr.path+'.'+pr.prop, pr.array_index, prop)
     return
 
 def panelprop(id: bpy.types.ID, path: str) -> Union[tuple[str, str], None]:
     pr = path_reassembly(id, path)
-    if not pr:
+    if pr is None:
         return
 
     try:
