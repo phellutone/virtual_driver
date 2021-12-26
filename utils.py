@@ -1,4 +1,4 @@
-from typing import Any, Literal, Protocol, Union, get_args
+from typing import Any, Literal, Union
 from dataclasses import dataclass
 import bpy
 
