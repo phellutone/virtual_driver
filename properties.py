@@ -5,7 +5,22 @@ from .utils import path_reassembly, animatable
 class FCurveWrapper(bpy.types.PropertyGroup):
     id: bpy.props.PointerProperty(type=bpy.types.ID)
     data_path: bpy.props.StringProperty()
-    array_index: bpy.props.IntProperty()
+    anim_index: bpy.props.IntProperty()
+
+    def path_observer(self):
+        if not hasattr(self.id, 'animation_data'):
+            return 
+        if not self.id.animation_data:
+            return
+        fixes = [i for i, f in enumerate(self.id.animation_data.drivers) if f.data_path == self.data_path]
+        if not fixes:
+            return
+        if len(fixes) > 1:
+            return
+        return fixes[0]
+
+    def init():
+        ...
 
 class VirtualDriver(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty()
@@ -77,12 +92,18 @@ class VirtualDriver(bpy.types.PropertyGroup):
             self.dummy = None
             self.is_valid = False
             return
-        _, _, _, property = anim
-        prop = self.copy_anim_property(property)
-        if prop is None:
+        id, data_path, array_index, property = anim
+
+        property = self.copy_anim_property(property)
+        if property is None:
             self.is_valid = False
             return
-        self.__class__.dummy = prop
+        self.__class__.dummy = property
+
+        fcurve: FCurveWrapper = self.fcurve
+        fcurve.id = self.id_data
+        fcurve.data_path = self.path_from_id('dummy')
+
     data_path: bpy.props.StringProperty(update=data_path_update)
 
     def copy_anim_property(self, property: bpy.types.Property) -> Union[bpy.props._PropertyDeferred, None]:
