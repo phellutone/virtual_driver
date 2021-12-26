@@ -176,32 +176,16 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
     property.translation_context
     
     if property.type == 'BOOLEAN':
-        if property.is_array:
-            default = property.default_array
-            size = property.array_length
-            return bpy.props.BoolProperty(
-                name=name,
-                description=description,
-                options=options,
-                override=override,
-                tags=tags,
-                subtype=subtype,
-                default=default,
-                size=size,
-                update=cb
-            )
-        else:
-            default = property.default
-            return bpy.props.BoolProperty(
-                name=name,
-                description=description,
-                options=options,
-                override=override,
-                tags=tags,
-                subtype=subtype,
-                default=default,
-                update=cb
-            )
+        default = property.default
+        return bpy.props.BoolProperty(
+            name=name,
+            description=description,
+            options=options,
+            override=override,
+            # subtype=subtype,
+            default=default,
+            update=cb
+        )
 
     if property.type == 'INT':
         min = property.hard_min
@@ -209,42 +193,21 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
         soft_min = property.soft_min
         soft_max = property.soft_max
         step = property.step
-        if property.is_array:
-            default = property.default_array
-            size = property.array_length
-            return bpy.props.IntProperty(
-                name=name,
-                description=description,
-                options=options,
-                override=override,
-                tags=tags,
-                subtype=subtype,
-                default=default,
-                size=size,
-                min=min,
-                max=max,
-                soft_min=soft_min,
-                soft_max=soft_max,
-                step=step,
-                update=cb
-            )
-        else:
-            default = property.default
-            return bpy.props.IntProperty(
-                name=name,
-                description=description,
-                options=options,
-                override=override,
-                tags=tags,
-                subtype=subtype,
-                default=default,
-                min=min,
-                max=max,
-                soft_min=soft_min,
-                soft_max=soft_max,
-                step=step,
-                update=cb
-            )
+        default = property.default
+        return bpy.props.IntProperty(
+            name=name,
+            description=description,
+            options=options,
+            override=override,
+            # subtype=subtype,
+            default=default,
+            min=min,
+            max=max,
+            soft_min=soft_min,
+            soft_max=soft_max,
+            step=step,
+            update=cb
+        )
         
     if property.type == 'FLOAT':
         min = property.hard_min
@@ -253,44 +216,22 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
         soft_max = property.soft_max
         step = property.step
         precision = property.precision
-        if property.is_array:
-            default = property.default_array
-            size = property.array_length
-            return bpy.props.FloatProperty(
-                name=name,
-                description=description,
-                options=options,
-                override=override,
-                tags=tags,
-                subtype=subtype,
-                default=default,
-                size=size,
-                min=min,
-                max=max,
-                soft_min=soft_min,
-                soft_max=soft_max,
-                step=step,
-                precision=precision,
-                update=cb
-            )
-        else:
-            default = property.default
-            return bpy.props.FloatProperty(
-                name=name,
-                description=description,
-                options=options,
-                override=override,
-                tags=tags,
-                subtype=subtype,
-                default=default,
-                min=min,
-                max=max,
-                soft_min=soft_min,
-                soft_max=soft_max,
-                step=step,
-                precision=precision,
-                update=cb
-            )
+        default = property.default
+        return bpy.props.FloatProperty(
+            name=name,
+            description=description,
+            options=options,
+            override=override,
+            # subtype=subtype,
+            default=default,
+            min=min,
+            max=max,
+            soft_min=soft_min,
+            soft_max=soft_max,
+            step=step,
+            precision=precision,
+            update=cb
+        )
     
     if property.type == 'ENUM':
         items = property.enum_items
