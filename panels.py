@@ -19,4 +19,4 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
         box.template_path_builder(vd, 'data_path', vd.id, text='Path')
 
         if vd.is_valid:
-            box.prop(vd.dummy, 'name')
+            box.prop(vd.dummy, 'prop')
