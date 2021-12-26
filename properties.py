@@ -4,7 +4,10 @@ from .utils import copy_anim_property, path_reassembly, animatable
 
 class VirtualDriverDummy:
     name: str
-    property: Any
+    prop: Any
+    is_valid: bool
+    id: bpy.types.ID
+    data_path: str
 
 _VIRTUALDRIVER_DUMMY_CLASSES: set[VirtualDriverDummy] = set()
 
@@ -78,10 +81,15 @@ class VirtualDriver(bpy.types.PropertyGroup):
             return
 
         _VIRTUALDRIVER_DUMMY_CLASSES.add(proptype)
-        print(_VIRTUALDRIVER_DUMMY_CLASSES)
         oldtype: Union[VirtualDriverDummy, bpy.types.PropertyGroup] = self.dummy.__class__
         bpy.utils.register_class(proptype)
         self.__class__.dummy = bpy.props.PointerProperty(type=proptype)
+        dummy: VirtualDriverDummy = self.dummy
+        dummy.name = str(self.id.name)+'.'+self.data_path
+        dummy.id = self.id
+        dummy.data_path = self.data_path
+        dummy.prop = self.id.path_resolve(self.data_path)
+        dummy.is_valid = True
         if VirtualDriverDummy in oldtype.__mro__:
             bpy.utils.unregister_class(oldtype)
             _VIRTUALDRIVER_DUMMY_CLASSES.remove(oldtype)
@@ -89,7 +97,7 @@ class VirtualDriver(bpy.types.PropertyGroup):
         self.is_valid = True
     data_path: bpy.props.StringProperty(update=data_path_update)
 
-def dummy_update(self: VirtualDriver, context):
+def dummy_update(self: VirtualDriverDummy, context):
     if not self.is_valid:
         return
     pr = path_reassembly(self.id, self.data_path)
@@ -97,9 +105,9 @@ def dummy_update(self: VirtualDriver, context):
         self.is_valid = False
         return
     if pr.graph[-1].type == 'path':
-        setattr(pr.id.path_resolve(pr.path) if pr.path else pr.id, pr.prop, self.dummy)
+        setattr(pr.id.path_resolve(pr.path) if pr.path else pr.id, pr.prop, self.prop)
     elif pr.graph[-1].type == 'int':
-        getattr(pr.id.path_resolve(pr.path) if pr.path else pr.id, pr.prop)[pr.array_index] = self.dummy
+        (pr.id.path_resolve(pr.path) if pr.path else pr.id).path_resolve(pr.prop)[pr.array_index] = self.prop
     self.is_valid = True
 
 def create_anim_propcopy(name: str, property: bpy.types.Property, cb: Callable[[Any, bpy.types.Context], None]) -> Union[VirtualDriverDummy, None]:
@@ -112,7 +120,10 @@ def create_anim_propcopy(name: str, property: bpy.types.Property, cb: Callable[[
         {
             '__annotations__': {
                 'name': bpy.props.StringProperty(default=name),
-                # 'property': prop,
+                'prop': prop,
+                'is_valid': bpy.props.BoolProperty(),
+                'id': bpy.props.PointerProperty(type=bpy.types.ID),
+                'data_path': bpy.props.StringProperty()
             },
         },
     )
