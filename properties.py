@@ -1,43 +1,19 @@
-from typing import Union
+from typing import Any, Callable, Union
 import bpy
-from .utils import path_reassembly, animatable
+from .utils import copy_anim_property, path_reassembly, animatable
 
-class FCurveWrapper(bpy.types.PropertyGroup):
-    id: bpy.props.PointerProperty(type=bpy.types.ID)
-    data_path: bpy.props.StringProperty()
-    anim_index: bpy.props.IntProperty()
+class VirtualDriverDummy:
+    name: str
+    property: Any
 
-    def path_observer(self):
-        if not hasattr(self.id, 'animation_data'):
-            return 
-        if not self.id.animation_data:
-            return
-        fixes = [i for i, f in enumerate(self.id.animation_data.drivers) if f.data_path == self.data_path]
-        if not fixes:
-            return
-        if len(fixes) > 1:
-            return
-        return fixes[0]
-
-    def init():
-        ...
+_VIRTUALDRIVER_DUMMY_CLASSES: set[VirtualDriverDummy] = set()
 
 class VirtualDriver(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty()
     index: bpy.props.IntProperty()
     is_valid: bpy.props.BoolProperty()
-    fcurve: bpy.props.PointerProperty(type=FCurveWrapper)
 
-    def dummy_update(self, context):
-        pr = path_reassembly(self.id, self.data_path)
-        if pr is None:
-            self.is_valid = False
-            return
-        if pr.graph[-1].type == 'path':
-            setattr(pr.id.path_resolve(pr.path) if pr.path else pr.id, pr.prop, self.dummy)
-        elif pr.graph[-1].type == 'int':
-            getattr(pr.id.path_resolve(pr.path) if pr.path else pr.id, pr.prop)[pr.array_index] = self.dummy
-    dummy: bpy.props.FloatProperty()
+    dummy: bpy.props.PointerProperty(type=bpy.types.PropertyGroup)
 
     def id_type_update(self, context):
         self.id = None
@@ -87,200 +63,56 @@ class VirtualDriver(bpy.types.PropertyGroup):
     id: bpy.props.PointerProperty(type=bpy.types.Object)
     
     def data_path_update(self, context):
+        global _VIRTUALDRIVER_DUMMY_CLASSES
         anim = animatable(self.id, self.data_path)
         if anim is None:
-            self.dummy = None
             self.is_valid = False
             return
-        id, data_path, array_index, property = anim
+        _, _, _, property = anim
 
-        property = self.copy_anim_property(property)
-        if property is None:
+        li = [int(c.__name__.split('_')[1]) for c in _VIRTUALDRIVER_DUMMY_CLASSES]
+        idx = max(max(li) if li else 0, 0)+1
+        proptype = create_anim_propcopy('VirtualDriverDummy_'+str(idx), property, dummy_update)
+        if proptype is None:
             self.is_valid = False
             return
-        self.__class__.dummy = property
 
-        fcurve: FCurveWrapper = self.fcurve
-        fcurve.id = self.id_data
-        fcurve.data_path = self.path_from_id('dummy')
+        _VIRTUALDRIVER_DUMMY_CLASSES.add(proptype)
+        print(_VIRTUALDRIVER_DUMMY_CLASSES)
+        oldtype: Union[VirtualDriverDummy, bpy.types.PropertyGroup] = self.dummy.__class__
+        bpy.utils.register_class(proptype)
+        self.__class__.dummy = bpy.props.PointerProperty(type=proptype)
+        if VirtualDriverDummy in oldtype.__mro__:
+            bpy.utils.unregister_class(oldtype)
+            _VIRTUALDRIVER_DUMMY_CLASSES.remove(oldtype)
 
+        self.is_valid = True
     data_path: bpy.props.StringProperty(update=data_path_update)
 
-    def copy_anim_property(self, property: bpy.types.Property) -> Union[bpy.props._PropertyDeferred, None]:
-        if not isinstance(property, bpy.types.Property):
-            return
-        
-        name = property.name
-        description = property.description
-        options = set()
-        if property.is_hidden:
-            options.add('HIDDEN')
-        if property.is_skip_save:
-            options.add('SKIP_SAVE')
-        if property.is_animatable:
-            options.add('ANIMATABLE')
-        if property.is_library_editable:
-            options.add('LIBRARY_EDITABLE')
-        override = set()
-        if property.is_overridable:
-            override.add('LIBRARY_OVERRIDABLE')
-        tags = property.tags
-        subtype = property.subtype
+def dummy_update(self: VirtualDriver, context):
+    if not self.is_valid:
+        return
+    pr = path_reassembly(self.id, self.data_path)
+    if pr is None:
+        self.is_valid = False
+        return
+    if pr.graph[-1].type == 'path':
+        setattr(pr.id.path_resolve(pr.path) if pr.path else pr.id, pr.prop, self.dummy)
+    elif pr.graph[-1].type == 'int':
+        getattr(pr.id.path_resolve(pr.path) if pr.path else pr.id, pr.prop)[pr.array_index] = self.dummy
+    self.is_valid = True
 
-        if property.is_argument_optional: ...
-        if property.is_never_none: ...
-        if property.is_output: ...
-        if property.is_readonly: ...
-        if property.is_registered: ...
-        if property.is_registered_optional: ...
-        if property.is_required: ...
-        if property.is_runtime: ...
-        property.unit
-        property.translation_context
-        
-        if property.type == 'BOOLEAN':
-            if property.is_array:
-                default = property.default_array
-                size = property.array_length
-                return bpy.props.BoolProperty(
-                    name=name,
-                    description=description,
-                    options=options,
-                    override=override,
-                    tags=tags,
-                    subtype=subtype,
-                    default=default,
-                    size=size,
-                    update=self.dummy_update
-                )
-            else:
-                default = property.default
-                return bpy.props.BoolProperty(
-                    name=name,
-                    description=description,
-                    options=options,
-                    override=override,
-                    tags=tags,
-                    subtype=subtype,
-                    default=default,
-                    update=self.dummy_update
-                )
-
-        if property.type == 'INT':
-            min = property.hard_min
-            max = property.hard_max
-            soft_min = property.soft_min
-            soft_max = property.soft_max
-            step = property.step
-            if property.is_array:
-                default = property.default_array
-                size = property.array_length
-                return bpy.props.IntProperty(
-                    name=name,
-                    description=description,
-                    options=options,
-                    override=override,
-                    tags=tags,
-                    subtype=subtype,
-                    default=default,
-                    size=size,
-                    min=min,
-                    max=max,
-                    soft_min=soft_min,
-                    soft_max=soft_max,
-                    step=step,
-                    update=self.dummy_update
-                )
-            else:
-                default = property.default
-                return bpy.props.IntProperty(
-                    name=name,
-                    description=description,
-                    options=options,
-                    override=override,
-                    tags=tags,
-                    subtype=subtype,
-                    default=default,
-                    min=min,
-                    max=max,
-                    soft_min=soft_min,
-                    soft_max=soft_max,
-                    step=step,
-                    update=self.dummy_update
-                )
-            
-        if property.type == 'FLOAT':
-            min = property.hard_min
-            max = property.hard_max
-            soft_min = property.soft_min
-            soft_max = property.soft_max
-            step = property.step
-            precision = property.precision
-            if property.is_array:
-                default = property.default_array
-                size = property.array_length
-                return bpy.props.FloatProperty(
-                    name=name,
-                    description=description,
-                    options=options,
-                    override=override,
-                    tags=tags,
-                    subtype=subtype,
-                    default=default,
-                    size=size,
-                    min=min,
-                    max=max,
-                    soft_min=soft_min,
-                    soft_max=soft_max,
-                    step=step,
-                    precision=precision,
-                    update=self.dummy_update
-                )
-            else:
-                default = property.default
-                return bpy.props.FloatProperty(
-                    name=name,
-                    description=description,
-                    options=options,
-                    override=override,
-                    tags=tags,
-                    subtype=subtype,
-                    default=default,
-                    min=min,
-                    max=max,
-                    soft_min=soft_min,
-                    soft_max=soft_max,
-                    step=step,
-                    precision=precision,
-                    update=self.dummy_update
-                )
-        
-        if property.type == 'ENUM':
-            items = property.enum_items
-            if property.is_enum_flag:
-                options.add('ENUM_FLAG')
-                default = property.default_flag
-                return bpy.props.EnumProperty(
-                    name=name,
-                    description=description,
-                    options=options,
-                    override=override,
-                    tags=tags,
-                    subtype=subtype,
-                    default=default,
-                    items=items,
-                    update=self.dummy_update
-                )
-            else:
-                default = property.default
-                return bpy.props.EnumProperty(
-                    name=name,
-                    description=description,
-                    options=options,
-                    override=override,
-                    tags=tags,
-                    subtype=subtype,
-                    default=default,
-                    items=items,
-                    update=self.dummy_update
-                )
+def create_anim_propcopy(name: str, property: bpy.types.Property, cb: Callable[[Any, bpy.types.Context], None]) -> Union[VirtualDriverDummy, None]:
+    prop = copy_anim_property(property, cb)
+    if prop is None:
+        return
+    return type(
+        name,
+        (bpy.types.PropertyGroup, VirtualDriverDummy, ),
+        {
+            '__annotations__': {
+                'name': bpy.props.StringProperty(default=name),
+                # 'property': prop,
+            },
+        },
+    )

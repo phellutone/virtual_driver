@@ -11,13 +11,22 @@ control
 """
 
 import bpy
+from .properties import VirtualDriver
+from .panels import OBJECT_PT_VirtualDriver
 
-classes = ()
+classes = (
+    VirtualDriver,
+    OBJECT_PT_VirtualDriver
+)
 
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
+    
+    bpy.types.Scene.virtual_driver = bpy.props.PointerProperty(type=VirtualDriver)
 
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
+    
+    del bpy.types.Scene.virtual_driver

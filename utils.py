@@ -1,4 +1,4 @@
-from typing import Any, Literal, Union
+from typing import Any, Callable, Literal, Union
 from dataclasses import dataclass
 import bpy
 
@@ -142,3 +142,178 @@ def panelprop(id: bpy.types.ID, path: str) -> Union[tuple[str, str], None]:
         return
     
     return (path, pr.prop)
+
+def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.types.Context], None]) -> Union[bpy.props._PropertyDeferred, None]:
+    if not isinstance(property, bpy.types.Property):
+        return
+    
+    name = property.name
+    description = property.description
+    options = set()
+    if property.is_hidden:
+        options.add('HIDDEN')
+    if property.is_skip_save:
+        options.add('SKIP_SAVE')
+    if property.is_animatable:
+        options.add('ANIMATABLE')
+    if property.is_library_editable:
+        options.add('LIBRARY_EDITABLE')
+    override = set()
+    if property.is_overridable:
+        override.add('LIBRARY_OVERRIDABLE')
+    tags = property.tags
+    subtype = property.subtype
+
+    if property.is_argument_optional: ...
+    if property.is_never_none: ...
+    if property.is_output: ...
+    if property.is_readonly: ...
+    if property.is_registered: ...
+    if property.is_registered_optional: ...
+    if property.is_required: ...
+    if property.is_runtime: ...
+    property.unit
+    property.translation_context
+    
+    if property.type == 'BOOLEAN':
+        if property.is_array:
+            default = property.default_array
+            size = property.array_length
+            return bpy.props.BoolProperty(
+                name=name,
+                description=description,
+                options=options,
+                override=override,
+                tags=tags,
+                subtype=subtype,
+                default=default,
+                size=size,
+                update=cb
+            )
+        else:
+            default = property.default
+            return bpy.props.BoolProperty(
+                name=name,
+                description=description,
+                options=options,
+                override=override,
+                tags=tags,
+                subtype=subtype,
+                default=default,
+                update=cb
+            )
+
+    if property.type == 'INT':
+        min = property.hard_min
+        max = property.hard_max
+        soft_min = property.soft_min
+        soft_max = property.soft_max
+        step = property.step
+        if property.is_array:
+            default = property.default_array
+            size = property.array_length
+            return bpy.props.IntProperty(
+                name=name,
+                description=description,
+                options=options,
+                override=override,
+                tags=tags,
+                subtype=subtype,
+                default=default,
+                size=size,
+                min=min,
+                max=max,
+                soft_min=soft_min,
+                soft_max=soft_max,
+                step=step,
+                update=cb
+            )
+        else:
+            default = property.default
+            return bpy.props.IntProperty(
+                name=name,
+                description=description,
+                options=options,
+                override=override,
+                tags=tags,
+                subtype=subtype,
+                default=default,
+                min=min,
+                max=max,
+                soft_min=soft_min,
+                soft_max=soft_max,
+                step=step,
+                update=cb
+            )
+        
+    if property.type == 'FLOAT':
+        min = property.hard_min
+        max = property.hard_max
+        soft_min = property.soft_min
+        soft_max = property.soft_max
+        step = property.step
+        precision = property.precision
+        if property.is_array:
+            default = property.default_array
+            size = property.array_length
+            return bpy.props.FloatProperty(
+                name=name,
+                description=description,
+                options=options,
+                override=override,
+                tags=tags,
+                subtype=subtype,
+                default=default,
+                size=size,
+                min=min,
+                max=max,
+                soft_min=soft_min,
+                soft_max=soft_max,
+                step=step,
+                precision=precision,
+                update=cb
+            )
+        else:
+            default = property.default
+            return bpy.props.FloatProperty(
+                name=name,
+                description=description,
+                options=options,
+                override=override,
+                tags=tags,
+                subtype=subtype,
+                default=default,
+                min=min,
+                max=max,
+                soft_min=soft_min,
+                soft_max=soft_max,
+                step=step,
+                precision=precision,
+                update=cb
+            )
+    
+    if property.type == 'ENUM':
+        items = property.enum_items
+        if property.is_enum_flag:
+            options.add('ENUM_FLAG')
+            default = property.default_flag
+            return bpy.props.EnumProperty(
+                name=name,
+                description=description,
+                options=options,
+                override=override,
+                default=default,
+                items=items,
+                update=cb
+            )
+        else:
+            default = property.default
+            return bpy.props.EnumProperty(
+                name=name,
+                description=description,
+                options=options,
+                override=override,
+                default=default,
+                items=items,
+                update=cb
+            )
