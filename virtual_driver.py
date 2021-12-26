@@ -24,9 +24,11 @@ def register():
         bpy.utils.register_class(cls)
     
     bpy.types.Scene.virtual_driver = bpy.props.PointerProperty(type=VirtualDriver)
+    bpy.types.Scene.active_virtual_driver_index = bpy.props.IntProperty()
 
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
     
     del bpy.types.Scene.virtual_driver
+    del bpy.types.Scene.active_virtual_driver_index
