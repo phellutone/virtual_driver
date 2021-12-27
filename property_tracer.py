@@ -139,6 +139,10 @@ class _PropTrace:
     is_valid: bool
     prop: Any
 
+class _PropTrace_0(bpy.types.PropertyGroup, _PropTrace):
+    id: bpy.props.PointerProperty(type=bpy.types.ID)
+    data_path: bpy.props.StringProperty()
+
 def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.types.Context], None]) -> Union[bpy.props._PropertyDeferred, None]:
     if not isinstance(property, bpy.types.Property):
         return
@@ -172,13 +176,11 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
     property.translation_context
     
     if property.type == 'BOOLEAN':
-        default = property.default
         return bpy.props.BoolProperty(
             name=name,
             description=description,
             options=options,
             override=override,
-            default=default,
             update=cb
         )
 
@@ -188,13 +190,11 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
         soft_min = property.soft_min
         soft_max = property.soft_max
         step = property.step
-        default = property.default
         return bpy.props.IntProperty(
             name=name,
             description=description,
             options=options,
             override=override,
-            default=default,
             min=min,
             max=max,
             soft_min=soft_min,
@@ -210,13 +210,11 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
         soft_max = property.soft_max
         step = property.step
         precision = property.precision
-        default = property.default
         return bpy.props.FloatProperty(
             name=name,
             description=description,
             options=options,
             override=override,
-            default=default,
             min=min,
             max=max,
             soft_min=soft_min,
@@ -227,27 +225,23 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
         )
     
     if property.type == 'ENUM':
-        items = property.enum_items
+        items = [(i.identifier, i.name, i.description, i.icon, i.value) for i in property.enum_items]
         if property.is_enum_flag:
             options.add('ENUM_FLAG')
-            default = property.default_flag
             return bpy.props.EnumProperty(
                 name=name,
                 description=description,
                 options=options,
                 override=override,
-                default=default,
                 items=items,
                 update=cb
             )
         else:
-            default = property.default
             return bpy.props.EnumProperty(
                 name=name,
                 description=description,
                 options=options,
                 override=override,
-                default=default,
                 items=items,
                 update=cb
             )
@@ -271,7 +265,8 @@ def create_proptype(name: str, property: bpy.types.Property, cb: Callable[[Any, 
         },
     )
 
-class PropTraceItem(bpy.types.PropertyGroup): ...
-
+class PropTraceItem(bpy.types.PropertyGroup):
+    temp: bpy.props.PointerProperty(type=_PropTrace_0)
+    
 class PropertyTracer(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty()
+    ...

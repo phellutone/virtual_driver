@@ -234,7 +234,7 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
         )
     
     if property.type == 'ENUM':
-        items = property.enum_items
+        items = [(i.identifier, i.name, i.description, i.icon, i.value) for i in property.enum_items]
         if property.is_enum_flag:
             options.add('ENUM_FLAG')
             default = property.default_flag
