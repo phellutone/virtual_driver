@@ -269,4 +269,8 @@ class PropTraceItem(bpy.types.PropertyGroup):
     temp: bpy.props.PointerProperty(type=_PropTrace_0)
     
 class PropertyTracer(bpy.types.PropertyGroup):
-    ...
+    name: bpy.props.StringProperty()
+    index: bpy.propsIntProperty()
+    id: bpy.props.PointerProperty(type=bpy.types.ID)
+    data_path: bpy.props.StringProperty()
+    is_valid: bpy.props.BoolProperty()
