@@ -246,31 +246,64 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
                 update=cb
             )
 
-def create_proptype(name: str, property: bpy.types.Property, cb: Callable[[Any, bpy.types.Context], None]) -> Union[_PropTrace, None]:
-    prop = copy_anim_property(property, cb)
-    if prop is None:
-        return
+def create_proptype(name: str, props: dict[str, bpy.props._PropertyDeferred]) -> _PropTrace:
     return type(
         name,
-        (bpy.types.PropertyGroup, _PropTrace, ),
+        (bpy.types.PropertyGroup, _PropTrace,),
         {
-            '__annotations__': {
-                'name': bpy.props.StringProperty(default=name),
-                'index': bpy.props.IntProperty(),
-                'id': bpy.props.PointerProperty(type=bpy.types.ID),
-                'data_path': bpy.props.StringProperty(),
-                'is_valid': bpy.props.BoolProperty(),
-                'prop': prop,
-            },
+            '__annotations__': props
         },
     )
 
 class PropTraceItem(bpy.types.PropertyGroup):
-    temp: bpy.props.PointerProperty(type=_PropTrace_0)
+    """
+    all properties are dynamic, iterable
+    """
+    def __init__(self) -> None:
+        self._i = 0
+        self._l: list[tuple[str, _PropTrace]] = []
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self) -> _PropTrace:
+        try:
+            v = self._l[self._i][1]
+            self._i += 1
+            return v
+        except IndexError:
+            raise StopIteration
+    
+    def add(self, identifier, id: bpy.types.ID, data_path: str):
+        anim = animatable(id, data_path)
+        if anim is None:
+            return
+        _, _, _, prop = anim
+        proptype = create_proptype(identifier, {
+            'name': bpy.props.StringProperty(default=identifier),
+            'index': bpy.props.IntProperty(),
+            'id': bpy.props.PointerProperty(),
+            'data_path': bpy.props.StringProperty(),
+            'is_valid': bpy.props.BoolProeprty(),
+            'prop': copy_anim_property(prop, None)
+        })
+        self._l.append((identifier, proptype))
+        pointer = bpy.props.PointerProperty(type=proptype)
+        bpy.utils.register_class(proptype)
+        setattr(PropTraceItem, identifier, pointer)
+
+    def remove(self, identifier: str):
+        proptypes = [i[1] for i in self._l if i[0] == identifier]
+        if not proptypes:
+            return
+        self._l = [i for i in self._l if not i[0] == identifier]
+        proptype = proptypes[0]
+        bpy.utils.unregister_class(proptype)
+        delattr(PropTraceItem, identifier)
     
 class PropertyTracer(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty()
     index: bpy.propsIntProperty()
+    id_type: bpy.props.IntProperty()
     id: bpy.props.PointerProperty(type=bpy.types.ID)
     data_path: bpy.props.StringProperty()
-    is_valid: bpy.props.BoolProperty()
