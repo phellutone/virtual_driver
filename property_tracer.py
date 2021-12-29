@@ -256,9 +256,6 @@ def create_proptype(name: str, props: dict[str, bpy.props._PropertyDeferred]) ->
     )
 
 class PropTraceItem(bpy.types.PropertyGroup):
-    """
-    all properties are dynamic, iterable
-    """
     def __init__(self) -> None:
         self._i = 0
         self._l: list[tuple[str, _PropTrace]] = []
@@ -284,7 +281,7 @@ class PropTraceItem(bpy.types.PropertyGroup):
             'index': bpy.props.IntProperty(),
             'id': bpy.props.PointerProperty(),
             'data_path': bpy.props.StringProperty(),
-            'is_valid': bpy.props.BoolProeprty(),
+            'is_valid': bpy.props.BoolProperty(),
             'prop': copy_anim_property(prop, None)
         })
         self._l.append((identifier, proptype))
@@ -303,7 +300,7 @@ class PropTraceItem(bpy.types.PropertyGroup):
     
 class PropertyTracer(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty()
-    index: bpy.propsIntProperty()
+    index: bpy.props.IntProperty()
     id_type: bpy.props.IntProperty()
     id: bpy.props.PointerProperty(type=bpy.types.ID)
     data_path: bpy.props.StringProperty()
