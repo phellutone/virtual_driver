@@ -246,9 +246,9 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
                 update=cb
             )
 
-def create_proptype(name: str, props: dict[str, bpy.props._PropertyDeferred]) -> _PropTrace:
+def create_proptype(identifier: str, props: dict[str, bpy.props._PropertyDeferred]) -> _PropTrace:
     return type(
-        name,
+        identifier,
         (bpy.types.PropertyGroup, _PropTrace,),
         {
             '__annotations__': props
@@ -271,7 +271,7 @@ class PropTraceItem(bpy.types.PropertyGroup):
         except IndexError:
             raise StopIteration
     
-    def add(self, identifier, id: bpy.types.ID, data_path: str):
+    def add(self, identifier: str, id: bpy.types.ID, data_path: str):
         anim = animatable(id, data_path)
         if anim is None:
             return
