@@ -22,48 +22,60 @@ class VirtualDriver(bpy.types.PropertyGroup):
         self.id = None
         c = eval('bpy.types.'+self.id_type)
         self.__class__.id = bpy.props.PointerProperty(type=c)
-    id_type: bpy.props.EnumProperty(items=[
-        ('Action',              'Action',           '', 'ACTION',               0),
-        ('Armature',            'Armature',         '', 'ARMATURE_DATA',        1),
-        ('Brush',               'Brush',            '', 'BRUSH_DATA',           2),
-        ('Camera',              'Camera',           '', 'CAMERA_DATA',          3),
-        ('CacheFile',           'Cache File',       '', 'FILE',                 4),
-        ('Curve',               'Curve',            '', 'CURVE_DATA',           5),
-        ('VectorFont',          'Font',             '', 'FONT_DATA',            6),
-        ('GreasePencil',        'Grease Pencil',    '', 'GREASEPENCIL',         7),
-        ('Collection',          'Collection',       '', 'OUTLINER_COLLECTION',  8),
-        ('Image',               'Image',            '', 'IMAGE_DATA',           9),
-        ('Key',                 'Key',              '', 'SHAPEKEY_DATA',        10),
-        ('Light',               'Light',            '', 'LIGHT_DATA',           11),
-        ('Library',             'Library',          '', 'LIBRARY_DATA_DIRECT',  12),
-        ('FreestyleLineStyle',  'Line Style',       '', 'LINE_DATA',            13),
-        ('Lattice',             'Lattice',          '', 'LATTICE_DATA',         14),
-        ('Mask',                'Mask',             '', 'MOD_MASK',             15),
-        ('Material',            'Material',         '', 'MATERIAL_DATA',        16),
-        ('MetaBall',            'Metaball',         '', 'META_DATA',            17),
-        ('Mesh',                'Mesh',             '', 'MESH_DATA',            18),
-        ('MovieClip',           'Movie Clip',       '', 'TRACKER',              19),
-        ('NodeTree',            'Node Tree',        '', 'NODETREE',             20),
-        ('Object',              'Object',           '', 'OBJECT_DATA',          21),
-        ('PaintCurve',          'Paint Curve',      '', 'CURVE_BEZCURVE',       22),
-        ('Palette',             'Palette',          '', 'COLOR',                23),
-        ('ParticleSettings',    'Particle',         '', 'PARTICLE_DATA',        24),
-        ('LightProbe',          'Light Probe',      '', 'LIGHTPROBE_CUBEMAP',   25),
-        ('Scene',               'Scene',            '', 'SCENE_DATA',           26),
-        ('ID',                  'Simulation',       '', 'PHYSICS',              27),
-        ('Sound',               'Sound',            '', 'SOUND',                28),
-        ('Speaker',             'Speaker',          '', 'SPEAKER',              29),
-        ('Text',                'Text',             '', 'TEXT',                 30),
-        ('Texture',             'Texture',          '', 'TEXTURE',              31),
-        ('ID',                  'Hair',             '', 'HAIR_DATA',            32),
-        ('ID',                  'Point Cloud',      '', 'POINTCLOUD_DATA',      33),
-        ('Volume',              'Volume',           '', 'VOLUME_DATA',          34),
-        ('WindowManager',       'Window Manager',   '', 'WINDOW',               35),
-        ('World',               'World',            '', 'WORLD_DATA',           36),
-        ('WorkSpace',           'Workspace',        '', 'WORKSPACE',            37)
-    ], default=21, update=id_type_update)
+    id_type: bpy.props.EnumProperty(
+        items=[
+            ('ACTION', 'Action', '', 'ACTION', 17217),
+            ('ARMATURE', 'Armature', '', 'ARMATURE_DATA', 21057),
+            ('BRUSH', 'Brush', '', 'BRUSH_DATA', 21058),
+            ('CAMERA', 'Camera', '', 'CAMERA_DATA', 16707),
+            ('CACHEFILE', 'Cache File', '', 'FILE', 17987),
+            ('CURVE', 'Curve', '', 'CURVE_DATA', 21827),
+            ('FONT', 'Font', '', 'FONT_DATA', 18006),
+            ('GREASEPENCIL', 'Grease Pencil', '', 'GREASEPENCIL', 17479),
+            ('COLLECTION', 'Collection', '', 'OUTLINER_COLLECTION', 21063),
+            ('IMAGE', 'Image', '', 'IMAGE_DATA', 19785),
+            ('KEY', 'Key', '', 'SHAPEKEY_DATA', 17739),
+            ('LIGHT', 'Light', '', 'LIGHT_DATA', 16716),
+            ('LIBRARY', 'Library', '', 'LIBRARY_DATA_DIRECT', 18764),
+            ('LINESTYLE', 'Line Style', '', 'LINE_DATA', 21324),
+            ('LATTICE', 'Lattice', '', 'LATTICE_DATA', 21580),
+            ('MASK', 'Mask', '', 'MOD_MASK', 21325),
+            ('MATERIAL', 'Material', '', 'MATERIAL_DATA', 16717),
+            ('META', 'Metaball', '', 'META_DATA', 16973),
+            ('MESH', 'Mesh', '', 'MESH_DATA', 17741),
+            ('MOVIECLIP', 'Movie Clip', '', 'TRACKER', 17229),
+            ('NODETREE', 'Node Tree', '', 'NODETREE', 21582),
+            ('OBJECT', 'Object', '', 'OBJECT_DATA', 16975),
+            ('PAINTCURVE', 'Paint Curve', '', 'CURVE_BEZCURVE', 17232),
+            ('PALETTE', 'Palette', '', 'COLOR', 19536),
+            ('PARTICLE', 'Particle', '', 'PARTICLE_DATA', 16720),
+            ('LIGHT_PROBE', 'Light Probe', '', 'LIGHTPROBE_CUBEMAP', 20556),
+            ('SCENE', 'Scene', '', 'SCENE_DATA', 17235),
+            ('SIMULATION', 'Simulation', '', 'PHYSICS', 18771),
+            ('SOUND', 'Sound', '', 'SOUND', 20307),
+            ('SPEAKER', 'Speaker', '', 'SPEAKER', 19283),
+            ('TEXT', 'Text', '', 'TEXT', 22612),
+            ('TEXTURE', 'Texture', '', 'TEXTURE_DATA', 17748),
+            ('HAIR', 'Hair', '', 'HAIR_DATA', 16712),
+            ('POINTCLOUD', 'Point Cloud', '', 'POINTCLOUD_DATA', 21584),
+            ('VOLUME', 'Volume', '', 'VOLUME_DATA', 20310),
+            ('WINDOWMANAGER', 'Window Manager', '', 'WINDOW', 19799),
+            ('WORLD', 'World', '', 'WORLD_DATA', 20311),
+            ('WORKSPACE', 'Workspace', '', 'WORKSPACE', 21335),
+        ],
+        name='ID Type',
+        description='Type of ID-block that can be used',
+        default='OBJECT',
 
-    id: bpy.props.PointerProperty(type=bpy.types.Object)
+        # update=id_type_update
+    )
+
+    id: bpy.props.PointerProperty(
+        name='ID-Block',
+        description='',
+        options=set(),
+        type=bpy.types.ID
+    )
     
     def data_path_update(self, context):
         global _VIRTUALDRIVER_DUMMY_CLASSES
