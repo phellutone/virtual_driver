@@ -6,6 +6,8 @@ import bpy
 
 # rna prpoerty recognize start ---------------------
 
+_PROPTRACE_RE_PATH_DISASSEMBLY: Pattern = re.compile(r'''(\[(?:(?P<str>".*?(?<!\\)")|(?P<int>\d+))\])|(?(1)|(?P<path>\w+))''')
+
 @dataclass
 class DisassemblyItem:
     type: Union[Literal['path'], Literal['int'], Literal['str']]
@@ -26,8 +28,6 @@ class Reassembly:
     prop: str
     array_index: int
     graph: list[AssemblyItem]
-
-_PROPTRACE_RE_PATH_DISASSEMBLY: Pattern = re.compile(r'''(\[(?:(?P<str>".*?(?<!\\)")|(?P<int>\d+))\])|(?(1)|(?P<path>\w+))''')
 
 def path_disassembly(path: str) -> list[DisassemblyItem]:
     res = _PROPTRACE_RE_PATH_DISASSEMBLY.finditer(path)
@@ -64,7 +64,7 @@ def path_assembly(id: bpy.types.ID, path: list[DisassemblyItem], resolve=True) -
 def path_reassembly(id: bpy.types.ID, path: str) -> Union[Reassembly, None]:
     if not isinstance(id, bpy.types.ID) or path == '':
         return
-    
+
     try:
         id.path_resolve(path)
         pd = path_disassembly(path)
@@ -73,7 +73,7 @@ def path_reassembly(id: bpy.types.ID, path: str) -> Union[Reassembly, None]:
             return
     except Exception as _:
         return
-    
+
     g1 = graph[-1]
     g2 = graph[-2]
     g3 = graph[-3] if len(graph) > 2 else None
@@ -203,12 +203,18 @@ class PropertyTracer(bpy.types.PropertyGroup):
     Dummy Property Tracer class for UI.
     Expect properties type of the class to change in runtime.
     '''
-    name: bpy.props.StringProperty()
+    name: bpy.props.StringProperty(
+        update=lambda self, context: property_tracer_update(self, 'name')
+    )
     index: bpy.props.IntProperty()
+    is_valid: bpy.types.BoolProperty(
+        update=lambda self, context: property_tracer_update(self, 'is_valid')
+    )
 
     def id_type_update(self, context):
         self.id = None
         PropertyTracer.id = bpy.props.PointerProperty(type=_PROPTRACE_ID_TYPE_PYTYPE[self.id_type])
+        property_tracer_update(self, 'id_type')
     id_type: bpy.props.EnumProperty(
         items=_PROPTRACE_ID_TYPE_STR,
         name='ID Type',
@@ -220,20 +226,34 @@ class PropertyTracer(bpy.types.PropertyGroup):
     id: bpy.props.PointerProperty(
         type=bpy.types.ID,
         name='ID',
-        description='ID-Block that the specific property used can be found drom (id_type property must be set first).'
+        description='ID-Block that the specific property used can be found drom (id_type property must be set first).',
+        update=lambda self, context: property_tracer_update(self, 'id')
     )
 
+    def data_path_update(self, context):
+        anim = animatable(self.id, self.data_path)
+        if not anim:
+            self.is_valid = False
+            return
+        self.is_valid = True
+        anim_id, anim_path, anim_arridx, anim_prop = anim
+        self.prop_type = anim_prop.type
+        PropertyTracer.prop = copy_anim_property(anim_prop, None)
+        property_tracer_update(self, 'data_path')
     data_path: bpy.props.StringProperty(
         name='Data Path',
         description='RNA Path (from ID-Block) to property used.'
     )
 
-    prop_type: bpy.props.StringProperty()
+    prop_type: bpy.props.StringProperty(
+        update=lambda self, context: property_tracer_update(self, 'prop_type')
+    )
     prop: bpy.props._PropertyDeferred
 
 class InternalPropTrace(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty()
     index: bpy.props.IntProperty()
+    is_valid: bpy.props.BoolProperty()
     id_type: bpy.props.IntProperty()
     id: bpy.props.PointerProperty(type=bpy.types.ID)
     data_path: bpy.props.StringProperty()
@@ -241,28 +261,10 @@ class InternalPropTrace(bpy.types.PropertyGroup):
     prop_type: bpy.props.StringProperty()
     prop: bpy.props.FloatProperty()
 
-# property trace end -------------------------------
-
-
-
-
-'''
-class _PropTrace:
-    name: str
-    index: int
-    id: bpy.types.ID
-    data_path: str
-    is_valid: bool
-    prop: Any
-
-class _PropTrace_0(bpy.types.PropertyGroup, _PropTrace):
-    id: bpy.props.PointerProperty(type=bpy.types.ID)
-    data_path: bpy.props.StringProperty()
-
 def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.types.Context], None]) -> Union[bpy.props._PropertyDeferred, None]:
     if not isinstance(property, bpy.types.Property):
         return
-    
+
     name = property.name
     description = property.description
     options = set()
@@ -277,20 +279,7 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
     override = set()
     if property.is_overridable:
         override.add('LIBRARY_OVERRIDABLE')
-    tags = property.tags
-    subtype = property.subtype
 
-    if property.is_argument_optional: ...
-    if property.is_never_none: ...
-    if property.is_output: ...
-    if property.is_readonly: ...
-    if property.is_registered: ...
-    if property.is_registered_optional: ...
-    if property.is_required: ...
-    if property.is_runtime: ...
-    property.unit
-    property.translation_context
-    
     if property.type == 'BOOLEAN':
         return bpy.props.BoolProperty(
             name=name,
@@ -318,7 +307,7 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
             step=step,
             update=cb
         )
-        
+
     if property.type == 'FLOAT':
         min = property.hard_min
         max = property.hard_max
@@ -339,7 +328,7 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
             precision=precision,
             update=cb
         )
-    
+
     if property.type == 'ENUM':
         items = [(i.identifier, i.name, i.description, i.icon, i.value) for i in property.enum_items]
         if property.is_enum_flag:
@@ -362,65 +351,12 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
                 update=cb
             )
 
-def create_proptype(identifier: str, props: dict[str, bpy.props._PropertyDeferred]) -> _PropTrace:
-    return type(
-        identifier,
-        (bpy.types.PropertyGroup, _PropTrace,),
-        {
-            '__annotations__': props
-        },
-    )
+def property_tracer_update(self, identifier):
+    index: int = self.index
+    pt: list[InternalPropTrace] = self.id_data.internal_prop_trace # TODO: register name
+    if not pt or index < 0:
+        return
+    block = pt[index]
+    setattr(block, identifier, getattr(self, identifier))
 
-class PropTraceItem(bpy.types.PropertyGroup):
-    def __init__(self) -> None:
-        self._i = 0
-        self._l: list[tuple[str, _PropTrace]] = []
-    
-    def __iter__(self):
-        return self
-    
-    def __next__(self) -> _PropTrace:
-        try:
-            v = self._l[self._i][1]
-            self._i += 1
-            return v
-        except IndexError:
-            raise StopIteration
-    
-    def add(self, identifier: str, id: bpy.types.ID, data_path: str):
-        anim = animatable(id, data_path)
-        if anim is None:
-            return
-        _, _, _, prop = anim
-        proptype = create_proptype(identifier, {
-            'name': bpy.props.StringProperty(default=identifier),
-            'index': bpy.props.IntProperty(),
-            'id': bpy.props.PointerProperty(),
-            'data_path': bpy.props.StringProperty(),
-            'is_valid': bpy.props.BoolProperty(),
-            'prop': copy_anim_property(prop, None)
-        })
-        self._l.append((identifier, proptype))
-        pointer = bpy.props.PointerProperty(type=proptype)
-        bpy.utils.register_class(proptype)
-        setattr(PropTraceItem, identifier, pointer)
-
-    def remove(self, identifier: str):
-        proptypes = [i[1] for i in self._l if i[0] == identifier]
-        if not proptypes:
-            return
-        self._l = [i for i in self._l if not i[0] == identifier]
-        proptype = proptypes[0]
-        bpy.utils.unregister_class(proptype)
-        delattr(PropTraceItem, identifier)
-    
-class PropertyTracer(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty()
-    index: bpy.props.IntProperty()
-    id_type: bpy.props.IntProperty()
-    id: bpy.props.PointerProperty(type=bpy.types.ID)
-    data_path: bpy.props.StringProperty()
-
-    prop_type: bpy.props.StringProperty()
-    prop: bpy.props.FloatProperty()
-'''
+# property trace end -------------------------------
