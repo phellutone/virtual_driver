@@ -1,10 +1,12 @@
-import types
 from typing import Any, Callable, Literal, Pattern, Union
 from dataclasses import dataclass
 import re
 import bpy
 
-# rna prpoerty recognize start ---------------------
+_PROPTRACE_BASIS: bpy.types.ID
+_PROPTRACE_BASIS_PATHS: dict[str, bpy.props._PropertyDeferred]
+
+# rna prpoerty recognize start
 
 _PROPTRACE_RE_PATH_DISASSEMBLY: Pattern = re.compile(r'''(\[(?:(?P<str>".*?(?<!\\)")|(?P<int>\d+))\])|(?(1)|(?P<path>\w+))''')
 
@@ -112,9 +114,9 @@ def animatable(id: bpy.types.ID, path: str) -> Union[tuple[bpy.types.ID, str, in
             return (pr.id, rpath, pr.array_index, prop)
     return
 
-# rna prpoerty recognize end -----------------------
+# rna prpoerty recognize end
 
-# property trace start -----------------------------
+# property trace start
 
 _PROPTRACE_ID_TYPE_STR: list[tuple[str, str, str, str, int]] = [
     ('ACTION', 'Action', '', 'ACTION', 17217),
@@ -203,6 +205,8 @@ class PropertyTracer(bpy.types.PropertyGroup):
     Dummy Property Tracer class for UI.
     Expect properties type of the class to change in runtime.
     '''
+    __identifier = 'property_tracer'
+
     name: bpy.props.StringProperty(
         update=lambda self, context: property_tracer_update(self, 'name')
     )
@@ -211,7 +215,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
         update=lambda self, context: property_tracer_update(self, 'is_valid')
     )
 
-    def id_type_update(self, context):
+    def id_type_update(self, context: bpy.types.Context) -> None:
         self.id = None
         PropertyTracer.id = bpy.props.PointerProperty(type=_PROPTRACE_ID_TYPE_PYTYPE[self.id_type])
         property_tracer_update(self, 'id_type')
@@ -230,7 +234,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
         update=lambda self, context: property_tracer_update(self, 'id')
     )
 
-    def data_path_update(self, context):
+    def data_path_update(self, context: bpy.types.Context) -> None:
         anim = animatable(self.id, self.data_path)
         if not anim:
             self.is_valid = False
@@ -251,6 +255,8 @@ class PropertyTracer(bpy.types.PropertyGroup):
     prop: bpy.props._PropertyDeferred
 
 class InternalPropTrace(bpy.types.PropertyGroup):
+    __identifier = 'internal_prop_trace'
+
     name: bpy.props.StringProperty()
     index: bpy.props.IntProperty()
     is_valid: bpy.props.BoolProperty()
@@ -351,12 +357,41 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
                 update=cb
             )
 
-def property_tracer_update(self, identifier):
+def property_tracer_update(self: PropertyTracer, identifier: str) -> None:
     index: int = self.index
-    pt: list[InternalPropTrace] = self.id_data.internal_prop_trace # TODO: register name
-    if not pt or index < 0:
+    ipt: list[InternalPropTrace] = getattr(self.id_data, InternalPropTrace.__identifier)
+    if not ipt or index < 0:
         return
-    block = pt[index]
+    block = ipt[index]
     setattr(block, identifier, getattr(self, identifier))
 
-# property trace end -------------------------------
+basis = bpy.types.Scene
+basis_paths = {
+    PropertyTracer.__identifier: bpy.props.PointerProperty(type=PropertyTracer),
+    InternalPropTrace.__identifier: bpy.props.CollectionProperty(type=InternalPropTrace)
+}
+
+# property trace end
+
+classes = (
+    PropertyTracer,
+    InternalPropTrace,
+)
+
+def preregister(basis: bpy.types.ID=basis, basis_paths: dict[str, bpy.props._PropertyDeferred]=basis_paths) -> None:
+    _PROPTRACE_BASIS = basis
+    _PROPTRACE_BASIS_PATHS = basis_paths
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+
+    for identifier in _PROPTRACE_BASIS_PATHS:
+        setattr(_PROPTRACE_BASIS, identifier, _PROPTRACE_BASIS_PATHS[identifier])
+
+def unregister():
+    for cls in classes:
+        bpy.utils.unregister_class(cls)
+
+    for identifier in _PROPTRACE_BASIS_PATHS:
+        delattr(_PROPTRACE_BASIS, identifier)
