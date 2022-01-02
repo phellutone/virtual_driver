@@ -1,10 +1,11 @@
-from typing import Any, Callable, Literal, Union
+from typing import Any, Callable, Literal, Pattern, Union
 from dataclasses import dataclass
+import re
 import bpy
 
 @dataclass
 class DisassemblyItem:
-    type: Union[Literal['path'], Literal['int'], Literal['str'], Literal['eval']]
+    type: Union[Literal['path'], Literal['int'], Literal['str']]
     path: Union[str, int, None]
 
 @dataclass
@@ -23,43 +24,19 @@ class Reassembly:
     array_index: int
     graph: list[AssemblyItem]
 
+_PROPTRACE_RE_PATH_DISASSEMBLY: Pattern = re.compile(r'''(\[(?:(?P<str>".*?(?<!\\)")|(?P<int>\d+))\])|(?(1)|(?P<path>\w+))''')
+
 def path_disassembly(path: str) -> list[DisassemblyItem]:
-    tmp = ''
-    res = []
-    sid = -1
-    for i, s in enumerate(path):
-        if sid != -1 and sid != i:
-            continue
-        sid = -1
-        if s == '[':
-            res.append(DisassemblyItem('path', tmp))
-            r, tmp = path_disassembly(path[i+1:])
-            sid = r+i
-            if len(tmp) > 1:
-                res.append(DisassemblyItem('eval', None))
-            else:
-                res.append(tmp[0])
-            tmp = ''
-        elif s == '.':
-            if tmp:
-                res.append(DisassemblyItem('path', tmp))
-            tmp = ''
-        elif s == '"':
-            idx = path.find('"', i+1)
-            res.append(DisassemblyItem('str', path[i:idx+1]))
-            sid = idx+1
-            tmp = ''
-        elif s == ']':
-            if tmp.isdigit():
-                res.append(DisassemblyItem('int', int(tmp)))
-            elif tmp:
-                res.append(DisassemblyItem('path', tmp))
-            return i+2, res
-        else:
-            tmp += s
-    if tmp:
-        res.append(DisassemblyItem('path', tmp))
-    return res
+    res = _PROPTRACE_RE_PATH_DISASSEMBLY.finditer(path)
+    result = []
+    for r in res:
+        if r.group('int'):
+            result.append(DisassemblyItem('int', int(r.group('int'))))
+        if r.group('str'):
+            result.append(DisassemblyItem('str', r.group('str')))
+        if r.group('path'):
+            result.append(DisassemblyItem('path', r.group('path')))
+    return result
 
 def path_assembly(id: bpy.types.ID, path: list[DisassemblyItem], resolve=True) -> list[AssemblyItem]:
     res = [AssemblyItem(None, '', id, None, 'id')]
@@ -103,6 +80,8 @@ def path_reassembly(id: bpy.types.ID, path: str) -> Union[Reassembly, None]:
     if g2.type == 'path':
         if g1.type == 'int':
             return Reassembly(id, g3.prna if g3 else '', g2.path, g1.path, graph)
+        if g1.type == 'str':
+            return Reassembly(id, g3.prna if g3 else '', g2.path, 0, graph)
     if g1.type == 'path':
         return Reassembly(id, g2.prna, g1.path, 0, graph)
     return
@@ -112,7 +91,8 @@ def animatable(id: bpy.types.ID, path: str) -> Union[tuple[bpy.types.ID, str, in
     if pr is None:
         return
 
-    graph = pr.graph    
+    rpath = pr.path+('.' if pr.path else '')+pr.prop
+    graph = pr.graph
     prop = graph[-1].prop
 
     if prop is None:
@@ -122,14 +102,16 @@ def animatable(id: bpy.types.ID, path: str) -> Union[tuple[bpy.types.ID, str, in
             return
         if prop.is_readonly:
             return
-        if prop.type in ('BOOLEAN', 'INT', 'FLOAT'):
+        if prop.type in ('BOOLEAN', 'INT', 'FLOAT', 'ENUM'):
             if prop.is_array:
                 if graph[-1].type == 'int':
-                    return (pr.id, pr.path+'.'+pr.prop, pr.array_index, prop)
+                    return (pr.id, rpath, pr.array_index, prop)
                 else:
                     return
-        return (pr.id, pr.path+'.'+pr.prop, pr.array_index, prop)
+            return (pr.id, rpath, pr.array_index, prop)
     return
+
+
 
 class _PropTrace:
     name: str
@@ -304,3 +286,6 @@ class PropertyTracer(bpy.types.PropertyGroup):
     id_type: bpy.props.IntProperty()
     id: bpy.props.PointerProperty(type=bpy.types.ID)
     data_path: bpy.props.StringProperty()
+
+    prop_type: bpy.props.StringProperty()
+    prop: bpy.props.FloatProperty()
