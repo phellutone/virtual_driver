@@ -2,6 +2,7 @@ from typing import Any, Callable, Literal, Pattern, Union
 from dataclasses import dataclass
 import re
 import bpy
+from bpy import props
 
 @dataclass
 class DisassemblyItem:
@@ -110,7 +111,30 @@ def animatable(id: bpy.types.ID, path: str) -> Union[tuple[bpy.types.ID, str, in
     return
 
 
+class PropertyTracer(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty()
+    index: bpy.props.IntProperty()
+    id_type: bpy.props.EnumProperty()
+    id: bpy.props.PointerProperty(bpy.types.ID)
+    data_path: bpy.props.StringProperty()
 
+    prop_type: bpy.props.StringProperty()
+    prop: bpy.props._PropertyDeferred
+
+class InternalPropTrace(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty()
+    index: bpy.props.IntProperty()
+    id_type: bpy.props.IntProperty()
+    id: bpy.props.PointerProperty(type=bpy.types.ID)
+    data_path: bpy.props.StringProperty()
+
+    prop_type: bpy.props.StringProperty()
+    prop: bpy.props.FloatProperty()
+
+
+
+
+'''
 class _PropTrace:
     name: str
     index: int
@@ -287,3 +311,4 @@ class PropertyTracer(bpy.types.PropertyGroup):
 
     prop_type: bpy.props.StringProperty()
     prop: bpy.props.FloatProperty()
+'''
