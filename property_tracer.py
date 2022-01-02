@@ -30,12 +30,12 @@ def path_disassembly(path: str) -> list[DisassemblyItem]:
     res = _PROPTRACE_RE_PATH_DISASSEMBLY.finditer(path)
     result = []
     for r in res:
-        if r.group('int'):
-            result.append(DisassemblyItem('int', int(r.group('int'))))
-        if r.group('str'):
-            result.append(DisassemblyItem('str', r.group('str')))
         if r.group('path'):
             result.append(DisassemblyItem('path', r.group('path')))
+        elif r.group('int'):
+            result.append(DisassemblyItem('int', int(r.group('int'))))
+        elif r.group('str'):
+            result.append(DisassemblyItem('str', r.group('str')))
     return result
 
 def path_assembly(id: bpy.types.ID, path: list[DisassemblyItem], resolve=True) -> list[AssemblyItem]:
@@ -47,8 +47,6 @@ def path_assembly(id: bpy.types.ID, path: list[DisassemblyItem], resolve=True) -
             e = ('' if i == 0 else '.')+p.path
         elif p.type in ('int', 'str'):
             e = '['+str(p.path)+']'
-        elif p.type == 'eval':
-            return []
         prop = None
         stmp = stmp+e
         if resolve:
@@ -81,7 +79,7 @@ def path_reassembly(id: bpy.types.ID, path: str) -> Union[Reassembly, None]:
         if g1.type == 'int':
             return Reassembly(id, g3.prna if g3 else '', g2.path, g1.path, graph)
         if g1.type == 'str':
-            return Reassembly(id, g3.prna if g3 else '', g2.path, 0, graph)
+            return Reassembly(id, g3.prna if g3 else '', g2.path+'['+g1.path+']', 0, graph)
     if g1.type == 'path':
         return Reassembly(id, g2.prna, g1.path, 0, graph)
     return
