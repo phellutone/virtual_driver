@@ -199,6 +199,10 @@ _PROPTRACE_ID_TYPE_PYTYPE: dict[str, bpy.types.ID] = {
 }
 
 class PropertyTracer(bpy.types.PropertyGroup):
+    '''
+    Dummy Property Tracer class for UI.
+    Expect properties type of the class to change in runtime.
+    '''
     name: bpy.props.StringProperty()
     index: bpy.props.IntProperty()
 
