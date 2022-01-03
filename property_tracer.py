@@ -3,8 +3,8 @@ from dataclasses import dataclass
 import re
 import bpy
 
-_PROPTRACE_BASIS: bpy.types.ID
-_PROPTRACE_BASIS_PATHS: dict[str, bpy.props._PropertyDeferred]
+_PROPTRACE_BASE: bpy.types.bpy_struct = None
+_PROPTRACE_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
 
 # rna prpoerty recognize start
 
@@ -205,13 +205,13 @@ class PropertyTracer(bpy.types.PropertyGroup):
     Dummy Property Tracer class for UI.
     Expect properties type of the class to change in runtime.
     '''
-    __identifier = 'property_tracer'
+    identifier = 'property_tracer'
 
     name: bpy.props.StringProperty(
         update=lambda self, context: property_tracer_update(self, 'name')
     )
     index: bpy.props.IntProperty()
-    is_valid: bpy.types.BoolProperty(
+    is_valid: bpy.props.BoolProperty(
         update=lambda self, context: property_tracer_update(self, 'is_valid')
     )
 
@@ -255,7 +255,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
     prop: bpy.props._PropertyDeferred
 
 class InternalPropTrace(bpy.types.PropertyGroup):
-    __identifier = 'internal_prop_trace'
+    identifier = 'internal_prop_trace'
 
     name: bpy.props.StringProperty()
     index: bpy.props.IntProperty()
@@ -358,17 +358,23 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
             )
 
 def property_tracer_update(self: PropertyTracer, identifier: str) -> None:
+    pr = path_reassembly(self.id_data, self.path_from_id(identifier))
+    if not pr:
+        return
+    graph = pr.graph
+    if len(graph) < 3:
+        return
     index: int = self.index
-    ipt: list[InternalPropTrace] = getattr(self.id_data, InternalPropTrace.__identifier)
+    ipt: list[InternalPropTrace] = getattr(graph[-3].eval, InternalPropTrace.identifier)
     if not ipt or index < 0:
         return
     block = ipt[index]
     setattr(block, identifier, getattr(self, identifier))
 
-basis = bpy.types.Scene
-basis_paths = {
-    PropertyTracer.__identifier: bpy.props.PointerProperty(type=PropertyTracer),
-    InternalPropTrace.__identifier: bpy.props.CollectionProperty(type=InternalPropTrace)
+base = bpy.types.Scene
+base_paths = {
+    PropertyTracer.identifier: bpy.props.PointerProperty(type=PropertyTracer),
+    InternalPropTrace.identifier: bpy.props.CollectionProperty(type=InternalPropTrace)
 }
 
 # property trace end
@@ -378,20 +384,25 @@ classes = (
     InternalPropTrace,
 )
 
-def preregister(basis: bpy.types.ID=basis, basis_paths: dict[str, bpy.props._PropertyDeferred]=basis_paths) -> None:
-    _PROPTRACE_BASIS = basis
-    _PROPTRACE_BASIS_PATHS = basis_paths
+def preregister(base: bpy.types.bpy_struct=base, base_paths: dict[str, bpy.props._PropertyDeferred]=base_paths) -> None:
+    global _PROPTRACE_BASE, _PROPTRACE_BASE_PATHS
+    _PROPTRACE_BASE = base
+    _PROPTRACE_BASE_PATHS = base_paths
 
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
 
-    for identifier in _PROPTRACE_BASIS_PATHS:
-        setattr(_PROPTRACE_BASIS, identifier, _PROPTRACE_BASIS_PATHS[identifier])
+    for identifier in _PROPTRACE_BASE_PATHS:
+        setattr(_PROPTRACE_BASE, identifier, _PROPTRACE_BASE_PATHS[identifier])
 
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
 
-    for identifier in _PROPTRACE_BASIS_PATHS:
-        delattr(_PROPTRACE_BASIS, identifier)
+    for identifier in _PROPTRACE_BASE_PATHS:
+        delattr(_PROPTRACE_BASE, identifier)
+
+if __name__ == '__main__':
+    preregister()
+    register()
