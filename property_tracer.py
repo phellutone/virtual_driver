@@ -306,7 +306,12 @@ class PropertyTracer(bpy.types.PropertyGroup):
 
     def id_type_update(self, context: bpy.types.Context) -> None:
         self.id = None
-        PropertyTracer.id = bpy.props.PointerProperty(type=_PROPTRACE_ID_TYPE_PYTYPE[self.id_type])
+        PropertyTracer.id = bpy.props.PointerProperty(
+            type=_PROPTRACE_ID_TYPE_PYTYPE[self.id_type],
+            name='ID',
+            description='ID-Block that the specific property used can be found drom (id_type property must be set first).',
+            update=lambda self, context: property_tracer_update(context, 'id')
+        )
         property_tracer_update(context, 'id_type')
     id_type: bpy.props.EnumProperty(
         items=_PROPTRACE_ID_TYPE_STR,
@@ -316,12 +321,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
         update=id_type_update
     )
 
-    id: bpy.props.PointerProperty(
-        type=bpy.types.ID,
-        name='ID',
-        description='ID-Block that the specific property used can be found drom (id_type property must be set first).',
-        update=lambda self, context: property_tracer_update(context, 'id')
-    )
+    id: bpy.props.PointerProperty()
 
     def data_path_update(self, context: bpy.types.Context) -> None:
         anim = animatable(self.id, self.data_path)
@@ -364,9 +364,9 @@ def property_tracer_update(context: bpy.types.Context, identifier: str) -> None:
     base = prop_trace_base_access_context_check(context)
     if base is None:
         return
-    pt = getattr(base, PropertyTracer.identifier)
-    ipt = getattr(base, InternalPropTrace.identifier)
-    index = getattr(base, InternalPropTraceIndex.identifier)
+    pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
+    ipt: list[InternalPropTrace] = getattr(base, InternalPropTrace.identifier)
+    index: int = getattr(base, InternalPropTraceIndex.identifier)
     if not ipt or index < 0:
         return
     block = ipt[index]
@@ -376,17 +376,18 @@ def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.ty
     base = prop_trace_base_access_context_check(context)
     if base is None:
         return
-    pt = getattr(base, PropertyTracer.identifier)
-    ipt = getattr(base, InternalPropTrace.identifier)
-    index = getattr(base, InternalPropTraceIndex.identifier)
+    pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
+    ipt: list[InternalPropTrace] = getattr(base, InternalPropTrace.identifier)
+    index: int = getattr(base, InternalPropTraceIndex.identifier)
     if not ipt or index < 0:
         return
     block = ipt[index]
 
+    temp_id = block.id
     pt.index = block.index
     pt.name = block.name
     pt.id_type = block.id_type
-    pt.id = block.id
+    pt.id = temp_id
     pt.data_path = block.data_path
 
 
@@ -402,9 +403,9 @@ class PROPTRACE_OT_add(bpy.types.Operator):
         base = prop_trace_base_access_context_check(context)
         if base is None:
             return {'CANCELLED'}
-        pt = getattr(base, PropertyTracer.identifier)
-        ipt = getattr(base, InternalPropTrace.identifier)
-        index = getattr(base, InternalPropTraceIndex.identifier)
+        pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
+        ipt: list[InternalPropTrace] = getattr(base, InternalPropTrace.identifier)
+        index: int = getattr(base, InternalPropTraceIndex.identifier)
 
         block: InternalPropTrace = ipt.add()
         length = len(ipt)
@@ -426,9 +427,9 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
         base = prop_trace_base_access_context_check(context)
         if base is None:
             return {'CANCELLED'}
-        pt = getattr(base, PropertyTracer.identifier)
-        ipt = getattr(base, InternalPropTrace.identifier)
-        index = getattr(base, InternalPropTraceIndex.identifier)
+        pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
+        ipt: list[InternalPropTrace] = getattr(base, InternalPropTrace.identifier)
+        index: int = getattr(base, InternalPropTraceIndex.identifier)
         if not ipt or index < 0:
             return {'CANCELLED'}
 
