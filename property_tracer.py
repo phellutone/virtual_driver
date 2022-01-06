@@ -1,9 +1,10 @@
+
 from typing import Any, Callable, Literal, Pattern, Union
 from dataclasses import dataclass
 import re
 import bpy
 
-# utiils
+# utils
 
 _PROPTRACE_RE_PATH_DISASSEMBLY: Pattern = re.compile(r'''(\[(?:(?P<str>".*?(?<!\\)")|(?P<int>\d+))\])|(?(1)|(?P<path>\w+))''')
 
@@ -293,24 +294,20 @@ _PROPTRACE_ID_TYPE_PYTYPE: dict[str, bpy.types.ID] = {
 }
 
 class PropertyTracer(bpy.types.PropertyGroup):
-    '''
-    Dummy Property Tracer class for UI.
-    Expect properties type of the class to change in runtime.
-    '''
-    identifier = 'property_tracer'
+    identifier: Literal['property_tracer'] = 'property_tracer'
 
     name: bpy.props.StringProperty(
-        update=lambda self, context: property_tracer_update(self, 'name')
+        update=lambda self, context: property_tracer_update(context, 'name')
     )
     index: bpy.props.IntProperty()
     is_valid: bpy.props.BoolProperty(
-        update=lambda self, context: property_tracer_update(self, 'is_valid')
+        update=lambda self, context: property_tracer_update(context, 'is_valid')
     )
 
     def id_type_update(self, context: bpy.types.Context) -> None:
         self.id = None
         PropertyTracer.id = bpy.props.PointerProperty(type=_PROPTRACE_ID_TYPE_PYTYPE[self.id_type])
-        property_tracer_update(self, 'id_type')
+        property_tracer_update(context, 'id_type')
     id_type: bpy.props.EnumProperty(
         items=_PROPTRACE_ID_TYPE_STR,
         name='ID Type',
@@ -323,7 +320,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
         type=bpy.types.ID,
         name='ID',
         description='ID-Block that the specific property used can be found drom (id_type property must be set first).',
-        update=lambda self, context: property_tracer_update(self, 'id')
+        update=lambda self, context: property_tracer_update(context, 'id')
     )
 
     def data_path_update(self, context: bpy.types.Context) -> None:
@@ -335,19 +332,20 @@ class PropertyTracer(bpy.types.PropertyGroup):
         anim_id, anim_path, anim_arridx, anim_prop = anim
         self.prop_type = anim_prop.type
         PropertyTracer.prop = copy_anim_property(anim_prop, None)
-        property_tracer_update(self, 'data_path')
+        property_tracer_update(context, 'data_path')
     data_path: bpy.props.StringProperty(
         name='Data Path',
-        description='RNA Path (from ID-Block) to property used.'
+        description='RNA Path (from ID-Block) to property used.',
+        update=data_path_update
     )
 
     prop_type: bpy.props.StringProperty(
-        update=lambda self, context: property_tracer_update(self, 'prop_type')
+        update=lambda self, context: property_tracer_update(context, 'prop_type')
     )
     prop: bpy.props._PropertyDeferred
 
 class InternalPropTrace(bpy.types.PropertyGroup):
-    identifier = 'internal_prop_trace'
+    identifier: Literal['internal_prop_trace'] = 'internal_prop_trace'
 
     name: bpy.props.StringProperty()
     index: bpy.props.IntProperty()
@@ -360,31 +358,27 @@ class InternalPropTrace(bpy.types.PropertyGroup):
     prop: bpy.props.FloatProperty()
 
 class InternalPropTraceIndex:
-    identifier = 'active_internal_prop_trace_index'
+    identifier: Literal['active_internal_prop_trace_index'] = 'active_internal_prop_trace_index'
 
-def property_tracer_update(self: PropertyTracer, identifier: str) -> None:
-    pr = path_reassembly(self.id_data, self.path_from_id(identifier))
-    if not pr:
+def property_tracer_update(context: bpy.types.Context, identifier: str) -> None:
+    base = prop_trace_base_access_context_check(context)
+    if base is None:
         return
-    graph = pr.graph
-    if len(graph) < 3:
-        return
-    index: int = self.index
-    ipt: list[InternalPropTrace] = getattr(graph[-3].eval, InternalPropTrace.identifier)
+    pt = getattr(base, PropertyTracer.identifier)
+    ipt = getattr(base, InternalPropTrace.identifier)
+    index = getattr(base, InternalPropTraceIndex.identifier)
     if not ipt or index < 0:
         return
     block = ipt[index]
-    setattr(block, identifier, getattr(self, identifier))
+    setattr(block, identifier, getattr(pt, identifier))
 
 def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.types.Context):
-    base = _PROPTRACE_BASE_ACCESSES[bpy.types.Context.__name__](context)
-    if not prop_trace_base_access_check(base):
+    base = prop_trace_base_access_context_check(context)
+    if base is None:
         return
-    pt: Union[PropertyTracer, None] = getattr(base, PropertyTracer.identifier, None)
-    ipt: Union[list[InternalPropTrace], None] = getattr(base, InternalPropTrace.identifier, None)
-    index: Union[int, None] = getattr(base, InternalPropTraceIndex.identifier, None)
-    if pt is None or ipt is None or index is None:
-        return
+    pt = getattr(base, PropertyTracer.identifier)
+    ipt = getattr(base, InternalPropTrace.identifier)
+    index = getattr(base, InternalPropTraceIndex.identifier)
     if not ipt or index < 0:
         return
     block = ipt[index]
@@ -405,14 +399,12 @@ class PROPTRACE_OT_add(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        base = _PROPTRACE_BASE_ACCESSES[bpy.types.Context.__name__](context)
-        if not prop_trace_base_access_check(base):
+        base = prop_trace_base_access_context_check(context)
+        if base is None:
             return {'CANCELLED'}
-        pt: Union[PropertyTracer, None] = getattr(base, PropertyTracer.identifier, None)
-        ipt: Union[list[InternalPropTrace], None] = getattr(base, InternalPropTrace.identifier, None)
-        index: Union[int, None] = getattr(base, InternalPropTraceIndex.identifier, None)
-        if pt is None or ipt is None or index is None:
-            return {'CANCELLED'}
+        pt = getattr(base, PropertyTracer.identifier)
+        ipt = getattr(base, InternalPropTrace.identifier)
+        index = getattr(base, InternalPropTraceIndex.identifier)
 
         block: InternalPropTrace = ipt.add()
         length = len(ipt)
@@ -431,14 +423,12 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        base = _PROPTRACE_BASE_ACCESSES[bpy.types.Context.__name__](context)
-        if not prop_trace_base_access_check(base):
+        base = prop_trace_base_access_context_check(context)
+        if base is None:
             return {'CANCELLED'}
-        pt: Union[PropertyTracer, None] = getattr(base, PropertyTracer.identifier, None)
-        ipt: Union[list[InternalPropTrace], None] = getattr(base, InternalPropTrace.identifier, None)
-        index: Union[int, None] = getattr(base, InternalPropTraceIndex.identifier, None)
-        if pt is None or ipt is None or index is None:
-            return {'CANCELLED'}
+        pt = getattr(base, PropertyTracer.identifier)
+        ipt = getattr(base, InternalPropTrace.identifier)
+        index = getattr(base, InternalPropTraceIndex.identifier)
         if not ipt or index < 0:
             return {'CANCELLED'}
 
@@ -456,15 +446,22 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
 
 # registration
 
-def prop_trace_base_access_check(base: bpy.types.bpy_struct):
-    if isinstance(base, _PROPTRACE_BASE_TYPE):
-        if (
-            hasattr(base, PropertyTracer.identifier) and
-            hasattr(base, InternalPropTrace.identifier) and
-            hasattr(base, InternalPropTraceIndex.identifier)
-        ):
-            return True
-    return False
+def prop_trace_base_access_context_check(context: bpy.types.Context):
+    base = _PROPTRACE_BASE_ACCESSES[bpy.types.Context.__name__](context)
+    if not isinstance(base, _PROPTRACE_BASE_TYPE):
+        return
+    if (
+        not hasattr(base, PropertyTracer.identifier) or
+        not hasattr(base, InternalPropTrace.identifier) or
+        not hasattr(base, InternalPropTraceIndex.identifier)
+    ):
+        return
+    pt: Union[PropertyTracer, None] = getattr(base, PropertyTracer.identifier, None)
+    ipt: Union[list[InternalPropTrace], None] = getattr(base, InternalPropTrace.identifier, None)
+    index: Union[int, None] = getattr(base, InternalPropTraceIndex.identifier, None)
+    if pt is None or ipt is None or index is None:
+        return
+    return base
 
 def prop_trace_base_access_context(context: bpy.types.Context):
     if isinstance(context, bpy.types.Context):
