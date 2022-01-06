@@ -1,18 +1,16 @@
-"""
-variables -(driver)> invisible property -(handler)> target
-
-input ID and path of property
-check if property is drivable
-create variable
-register ID, path and array_index
-create fcurve
-control
-
-"""
 
 import bpy
-from .properties import VirtualDriver
+from . import property_tracer
+from .properties import VirtualDriver, VirtualDriverIndex
 from .panels import OBJECT_PT_VirtualDriver
+
+def prop_trace_base_access_context(context: bpy.types.Context):
+    if isinstance(context, bpy.types.Context):
+        if hasattr(context, 'scene'):
+            scene = getattr(context, 'scene')
+            if isinstance(scene, bpy.types.Scene):
+                if hasattr(scene, VirtualDriver.identifier):
+                    return getattr(scene, VirtualDriver.identifier)
 
 classes = (
     VirtualDriver,
@@ -22,13 +20,21 @@ classes = (
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-    
-    bpy.types.Scene.virtual_driver = bpy.props.PointerProperty(type=VirtualDriver)
-    bpy.types.Scene.active_virtual_driver_index = bpy.props.IntProperty()
+
+    setattr(bpy.types.Scene, VirtualDriver.identifier, bpy.props.PointerProperty(type=VirtualDriver))
+    setattr(bpy.types.Scene, VirtualDriverIndex.identifier, bpy.props.IntProperty())
+
+    property_tracer.preregister(
+        VirtualDriver,
+        prop_trace_base_access_context
+    )
+    property_tracer.register()
 
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
-    
-    del bpy.types.Scene.virtual_driver
-    del bpy.types.Scene.active_virtual_driver_index
+
+    delattr(bpy.types.Scene, VirtualDriver.identifier)
+    delattr(bpy.types.Scene, VirtualDriverIndex.identifier)
+
+    property_tracer.unregister()

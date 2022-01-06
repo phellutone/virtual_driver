@@ -205,7 +205,7 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
 
 
 _PROPTRACE_BASE_TYPE: bpy.types.bpy_struct = None
-_PROPTRACE_BASE_ACCESSES: dict[str, Callable[[bpy.types.bpy_struct], bpy.types.bpy_struct]] = dict()
+_PROPTRACE_BASE_ACCESS_CONTEXT: Callable[[bpy.types.bpy_struct], bpy.types.bpy_struct] = None
 _PROPTRACE_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
 
 
@@ -321,7 +321,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
         update=id_type_update
     )
 
-    id: bpy.props.PointerProperty()
+    id: bpy.props.PointerProperty(type=bpy.types.ID)
 
     def data_path_update(self, context: bpy.types.Context) -> None:
         anim = animatable(self.id, self.data_path)
@@ -448,7 +448,7 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
 # registration
 
 def prop_trace_base_access_context_check(context: bpy.types.Context):
-    base = _PROPTRACE_BASE_ACCESSES[bpy.types.Context.__name__](context)
+    base = _PROPTRACE_BASE_ACCESS_CONTEXT(context)
     if not isinstance(base, _PROPTRACE_BASE_TYPE):
         return
     if (
@@ -470,9 +470,7 @@ def prop_trace_base_access_context(context: bpy.types.Context):
             return getattr(context, 'scene')
 
 base_type = bpy.types.Scene
-base_accesses = {
-    bpy.types.Context.__name__: prop_trace_base_access_context
-}
+base_access_context = prop_trace_base_access_context
 base_paths = {
     PropertyTracer.identifier: bpy.props.PointerProperty(type=PropertyTracer),
     InternalPropTrace.identifier: bpy.props.CollectionProperty(type=InternalPropTrace),
@@ -481,11 +479,11 @@ base_paths = {
 
 def preregister(
     base_type: bpy.types.bpy_struct = base_type,
-    base_accesses: dict[str, Callable[[bpy.types.bpy_struct], bpy.types.bpy_struct]] = base_accesses
+    base_access_context: Callable[[bpy.types.bpy_struct], bpy.types.bpy_struct] = base_access_context
 ):
-    global _PROPTRACE_BASE_TYPE, _PROPTRACE_BASE_ACCESSES, _PROPTRACE_BASE_PATHS
+    global _PROPTRACE_BASE_TYPE, _PROPTRACE_BASE_ACCESS_CONTEXT, _PROPTRACE_BASE_PATHS
     _PROPTRACE_BASE_TYPE = base_type
-    _PROPTRACE_BASE_ACCESSES = base_accesses
+    _PROPTRACE_BASE_ACCESS_CONTEXT = base_access_context
     _PROPTRACE_BASE_PATHS = base_paths
 
 classes = (

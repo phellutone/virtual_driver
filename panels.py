@@ -1,4 +1,5 @@
 import bpy
+from . import property_tracer
 from .properties import VirtualDriver
 
 class OBJECT_PT_VirtualDriver(bpy.types.Panel):
@@ -13,10 +14,11 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
         scene = context.scene
         layout = self.layout
         vd: VirtualDriver = scene.virtual_driver
+        pt: property_tracer.PropertyTracer = vd.property_tracer
 
         box = layout.box().column()
-        box.template_any_ID(vd, 'id', 'id_type', text='Prop:')
-        box.template_path_builder(vd, 'data_path', vd.id, text='Path')
+        box.template_any_ID(pt, 'id', 'id_type', text='Prop:')
+        box.template_path_builder(pt, 'data_path', pt.id, text='Path')
 
-        if vd.is_valid:
-            box.prop(vd.dummy, 'prop')
+        if pt.is_valid:
+            box.prop(pt, 'prop')
