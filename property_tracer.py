@@ -205,7 +205,7 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
 
 
 _PROPTRACE_BASE_TYPE: bpy.types.bpy_struct = None
-_PROPTRACE_BASE_ACCESS_CONTEXT: Callable[[bpy.types.bpy_struct], bpy.types.bpy_struct] = None
+_PROPTRACE_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context], bpy.types.bpy_struct] = None
 _PROPTRACE_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
 
 
@@ -306,7 +306,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
 
     def id_type_update(self, context: bpy.types.Context) -> None:
         self.id = None
-        PropertyTracer.id = bpy.props.PointerProperty(
+        self.__class__.id = bpy.props.PointerProperty(
             type=_PROPTRACE_ID_TYPE_PYTYPE[self.id_type],
             name='ID',
             description='ID-Block that the specific property used can be found drom (id_type property must be set first).',
@@ -331,7 +331,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
         self.is_valid = True
         anim_id, anim_path, anim_arridx, anim_prop = anim
         self.prop_type = anim_prop.type
-        PropertyTracer.prop = copy_anim_property(anim_prop, None)
+        self.__class__.prop = copy_anim_property(anim_prop, None)
         property_tracer_update(context, 'data_path')
     data_path: bpy.props.StringProperty(
         name='Data Path',
@@ -372,7 +372,7 @@ def property_tracer_update(context: bpy.types.Context, identifier: str) -> None:
     block = ipt[index]
     setattr(block, identifier, getattr(pt, identifier))
 
-def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.types.Context):
+def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.types.Context) -> None:
     base = prop_trace_base_access_context_check(context)
     if base is None:
         return
@@ -399,7 +399,7 @@ class PROPTRACE_OT_add(bpy.types.Operator):
     bl_description = ''
     bl_options = {'REGISTER', 'UNDO'}
 
-    def execute(self, context):
+    def execute(self, context: bpy.types.Context) -> set[str]:
         base = prop_trace_base_access_context_check(context)
         if base is None:
             return {'CANCELLED'}
@@ -423,7 +423,7 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
     bl_description = ''
     bl_options = {'REGISTER', 'UNDO'}
 
-    def execute(self, context):
+    def execute(self, context: bpy.types.Context) -> set[str]:
         base = prop_trace_base_access_context_check(context)
         if base is None:
             return {'CANCELLED'}
@@ -447,7 +447,7 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
 
 # registration
 
-def prop_trace_base_access_context_check(context: bpy.types.Context):
+def prop_trace_base_access_context_check(context: bpy.types.Context) -> Union[bpy.types.bpy_struct, None]:
     base = _PROPTRACE_BASE_ACCESS_CONTEXT(context)
     if not isinstance(base, _PROPTRACE_BASE_TYPE):
         return
@@ -464,7 +464,7 @@ def prop_trace_base_access_context_check(context: bpy.types.Context):
         return
     return base
 
-def prop_trace_base_access_context(context: bpy.types.Context):
+def prop_trace_base_access_context(context: bpy.types.Context) -> Union[bpy.types.bpy_struct, None]:
     if isinstance(context, bpy.types.Context):
         if hasattr(context, 'scene'):
             return getattr(context, 'scene')
@@ -479,7 +479,7 @@ base_paths = {
 
 def preregister(
     base_type: bpy.types.bpy_struct = base_type,
-    base_access_context: Callable[[bpy.types.bpy_struct], bpy.types.bpy_struct] = base_access_context
+    base_access_context: Callable[[bpy.types.Context], bpy.types.bpy_struct] = base_access_context
 ):
     global _PROPTRACE_BASE_TYPE, _PROPTRACE_BASE_ACCESS_CONTEXT, _PROPTRACE_BASE_PATHS
     _PROPTRACE_BASE_TYPE = base_type
