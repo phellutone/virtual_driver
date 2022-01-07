@@ -1,5 +1,5 @@
 
-# master/develop/feature/property-tracer
+# master/develop
 
 bl_info = {
     'name': 'virtual driver',
