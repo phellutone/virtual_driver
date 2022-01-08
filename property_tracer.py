@@ -22,12 +22,12 @@ class AssemblyItem:
     type: Union[Literal['id'], Literal['path'], Literal['int'], Literal['str']]
 
 @dataclass
-class Reassembly:
+class Interpretation:
     id: bpy.types.ID
-    path: str
-    prop: str
-    array_index: int
-    graph: list[AssemblyItem]
+    rna_path: str
+    prop_path: str
+    array_index: Union[int, None]
+    prop: bpy.types.Property
 
 def path_disassembly(path: str) -> list[DisassemblyItem]:
     res = _PROPTRACE_RE_PATH_DISASSEMBLY.finditer(path)
@@ -61,7 +61,7 @@ def path_assembly(id: bpy.types.ID, path: list[DisassemblyItem], resolve=True) -
         res.append(AssemblyItem(prop, stmp, tmp, p.path, p.type))
     return res
 
-def path_reassembly(id: bpy.types.ID, path: str) -> Union[Reassembly, None]:
+def path_recognize(id: bpy.types.ID, path: str) -> Union[Interpretation, None]:
     if not isinstance(id, bpy.types.ID) or path == '':
         return
 
@@ -74,43 +74,42 @@ def path_reassembly(id: bpy.types.ID, path: str) -> Union[Reassembly, None]:
     except Exception as _:
         return
 
-    g1 = graph[-1]
-    g2 = graph[-2]
-    g3 = graph[-3] if len(graph) > 2 else None
+    rgraph = graph[::-1]
+    for i, item in enumerate(rgraph):
+        if item.prop is None:
+            continue
 
-    if g2.type == 'path':
-        if g1.type == 'int':
-            return Reassembly(id, g3.prna if g3 else '', g2.path, g1.path, graph)
-        if g1.type == 'str':
-            return Reassembly(id, g3.prna if g3 else '', g2.path+'['+g1.path+']', 0, graph)
-    if g1.type == 'path':
-        return Reassembly(id, g2.prna, g1.path, 0, graph)
-    return
+        array_index = None
+        idx = [g for g in rgraph[:i]]
+        if idx:
+            if len(idx) > 1:
+                raise Exception('not supported')
+            else:
+                array_index = idx[0].path
 
-def animatable(id: bpy.types.ID, path: str) -> Union[tuple[bpy.types.ID, str, int, bpy.types.Property], None]:
-    pr = path_reassembly(id, path)
+        return Interpretation(
+            id,
+            rgraph[i+1].prna if len(rgraph) > i+1 else '',
+            item.path,
+            array_index,
+            item.prop
+        )
+
+def animatable(id: bpy.types.ID, path: str) -> Union[Interpretation, None]:
+    pr = path_recognize(id, path)
     if pr is None:
         return
 
-    rpath = pr.path+('.' if pr.path else '')+pr.prop
-    graph = pr.graph
-    prop = graph[-1].prop
-
-    if prop is None:
-        prop = graph[-2].prop
-    if isinstance(prop, bpy.types.Property):
-        if not prop.is_animatable:
+    if not pr.prop.is_animatable:
+        return
+    if pr.prop.is_readonly:
+        return
+    if pr.prop.type in ('COLLECTION', 'POINT'):
+        return
+    if pr.prop.type in ('BOOLEAN', 'INT', 'FLOAT'):
+        if pr.prop.is_array and pr.array_index is None:
             return
-        if prop.is_readonly:
-            return
-        if prop.type in ('BOOLEAN', 'INT', 'FLOAT', 'ENUM'):
-            if prop.is_array:
-                if graph[-1].type == 'int':
-                    return (pr.id, rpath, pr.array_index, prop)
-                else:
-                    return
-            return (pr.id, rpath, pr.array_index, prop)
-    return
+    return pr
 
 def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.types.Context], None]) -> Union[bpy.props._PropertyDeferred, None]:
     if not isinstance(property, bpy.types.Property):
@@ -305,12 +304,16 @@ class PropertyTracer(bpy.types.PropertyGroup):
     )
 
     def id_type_update(self, context: bpy.types.Context) -> None:
+        def id_update(self: PropertyTracer, context: bpy.types.Context) -> None:
+            self.valid_check()
+            property_tracer_update(context, 'id')
+
         self.id = None
         self.__class__.id = bpy.props.PointerProperty(
             type=_PROPTRACE_ID_TYPE_PYTYPE[self.id_type],
             name='ID',
             description='ID-Block that the specific property used can be found drom (id_type property must be set first).',
-            update=lambda self, context: property_tracer_update(context, 'id')
+            update=id_update
         )
         property_tracer_update(context, 'id_type')
     id_type: bpy.props.EnumProperty(
@@ -324,14 +327,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
     id: bpy.props.PointerProperty(type=bpy.types.ID)
 
     def data_path_update(self, context: bpy.types.Context) -> None:
-        anim = animatable(self.id, self.data_path)
-        if anim is None:
-            self.is_valid = False
-            return
-        self.is_valid = True
-        anim_id, anim_path, anim_arridx, anim_prop = anim
-        self.prop_type = anim_prop.type
-        self.__class__.prop = copy_anim_property(anim_prop, None)
+        self.valid_check()
         property_tracer_update(context, 'data_path')
     data_path: bpy.props.StringProperty(
         name='Data Path',
@@ -343,6 +339,22 @@ class PropertyTracer(bpy.types.PropertyGroup):
         update=lambda self, context: property_tracer_update(context, 'prop_type')
     )
     prop: bpy.props._PropertyDeferred
+
+    def valid_check(self) -> None:
+        anim = animatable(self.id, self.data_path)
+        if anim is None:
+            self.is_valid = False
+            return
+        self.is_valid = True
+        self.prop_type = anim.prop.type
+        self.__class__.prop = copy_anim_property(
+            anim.prop,
+            lambda self, context: property_tracer_update(context, 'prop')
+        )
+        if anim.array_index is None:
+            self.prop = getattr(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path)
+        else:
+            self.prop = getattr(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path)[anim.array_index]
 
 class InternalPropTrace(bpy.types.PropertyGroup):
     identifier: Literal['internal_prop_trace'] = 'internal_prop_trace'
@@ -361,7 +373,7 @@ class InternalPropTraceIndex:
     identifier: Literal['active_internal_prop_trace_index'] = 'active_internal_prop_trace_index'
 
 def property_tracer_update(context: bpy.types.Context, identifier: str) -> None:
-    base = prop_trace_base_access_context_check(context)
+    base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
     if base is None:
         return
     pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
@@ -373,7 +385,7 @@ def property_tracer_update(context: bpy.types.Context, identifier: str) -> None:
     setattr(block, identifier, getattr(pt, identifier))
 
 def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.types.Context) -> None:
-    base = prop_trace_base_access_context_check(context)
+    base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
     if base is None:
         return
     pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
@@ -389,6 +401,7 @@ def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.ty
     pt.id_type = block.id_type
     pt.id = temp_id
     pt.data_path = block.data_path
+    pt.prop = block.prop
 
 
 # operators
@@ -400,7 +413,7 @@ class PROPTRACE_OT_add(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context: bpy.types.Context) -> set[str]:
-        base = prop_trace_base_access_context_check(context)
+        base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
         if base is None:
             return {'CANCELLED'}
         pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
@@ -424,7 +437,7 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context: bpy.types.Context) -> set[str]:
-        base = prop_trace_base_access_context_check(context)
+        base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
         if base is None:
             return {'CANCELLED'}
         pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
@@ -447,8 +460,7 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
 
 # registration
 
-def prop_trace_base_access_context_check(context: bpy.types.Context) -> Union[bpy.types.bpy_struct, None]:
-    base = _PROPTRACE_BASE_ACCESS_CONTEXT(context)
+def prop_trace_base_access_check(base: bpy.types.bpy_struct) -> Union[bpy.types.bpy_struct, None]:
     if not isinstance(base, _PROPTRACE_BASE_TYPE):
         return
     if (
