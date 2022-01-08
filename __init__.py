@@ -1,5 +1,5 @@
 
-# master/develop
+# master/develop/feature/driver
 
 bl_info = {
     'name': 'virtual driver',
