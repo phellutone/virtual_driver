@@ -1,5 +1,5 @@
 
-from typing import Literal, Union
+from typing import Callable, Literal, Union
 import bpy
 from . import property_tracer
 
@@ -46,7 +46,7 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
     bl_label = 'Virtual Driver'
     bl_options = {'DEFAULT_CLOSED'}
 
-    def draw(self, context):
+    def draw(self, context: bpy.types.Context):
         layout = self.layout
         base = property_tracer.prop_trace_base_access_check(_VIRTUALDRIVER_BASE_ACCESS_CONTEXT(context))
         if base is None:
@@ -88,15 +88,15 @@ def virtual_driver_base_access_context(context: bpy.types.Context) -> Union[bpy.
         if hasattr(context, 'scene'):
             return getattr(context, 'scene')
 
-def virtual_driver_base_access_id(id: bpy.types.ID):
+def virtual_driver_base_access_id(id: bpy.types.ID) -> Union[bpy.types.bpy_struct, None]:
     if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID):
         return id
 
-_VIRTUALDRIVER_BASE_TYPE_ID = bpy.types.Scene
-_VIRTUALDRIVER_BASE_TYPE_PARENT = bpy.types.Scene
-_VIRTUALDRIVER_BASE_ACCESS_CONTEXT = virtual_driver_base_access_context
-_VIRTUALDRIVER_BASE_ACCESS_ID = virtual_driver_base_access_id
-_VIRTUALDRIVER_BASE_PATHS = {
+_VIRTUALDRIVER_BASE_TYPE_ID: bpy.types.ID = bpy.types.Scene
+_VIRTUALDRIVER_BASE_TYPE_PARENT: bpy.types.bpy_struct = bpy.types.Scene
+_VIRTUALDRIVER_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context], bpy.types.bpy_struct] = virtual_driver_base_access_context
+_VIRTUALDRIVER_BASE_ACCESS_ID: Callable[[bpy.types.ID], bpy.types.bpy_struct] = virtual_driver_base_access_id
+_VIRTUALDRIVER_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = {
     VirtualDriver.identifier: bpy.props.PointerProperty(type=VirtualDriver),
     InternalVirtualDriver.identifier: bpy.props.CollectionProperty(type=InternalVirtualDriver),
     VirtualDriverIndex.identifier: bpy.props.IntProperty(update=property_tracer.internal_prop_trace_index_update)
@@ -111,8 +111,8 @@ classes = (
     OBJECT_PT_VirtualDriver
 )
 
-_VIRTUALDRIVER_UPDATE_LOCK = False
-def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph):
+_VIRTUALDRIVER_UPDATE_LOCK: bool = False
+def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
     global _VIRTUALDRIVER_UPDATE_LOCK
     if _VIRTUALDRIVER_UPDATE_LOCK:
         return
@@ -120,30 +120,36 @@ def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph
     ids = [u.id for u in depsgraph.updates if isinstance(u.id, _VIRTUALDRIVER_BASE_TYPE_ID)]
     if not ids:
         return
-    base_id = ids[0]
-    base = property_tracer.prop_trace_base_access_check(_VIRTUALDRIVER_BASE_ACCESS_ID(base_id))
-    if base is None:
-        return
-    vd: VirtualDriver = getattr(base, VirtualDriver.identifier)
-    ivd: list[InternalVirtualDriver] = getattr(base, InternalVirtualDriver.identifier)
-    index: int = getattr(base, VirtualDriverIndex.identifier)
-    if not ivd or index < 0:
+
+    ivds: list[list[InternalVirtualDriver]] = []
+    for base_id in ids:
+        base = property_tracer.prop_trace_base_access_check(_VIRTUALDRIVER_BASE_ACCESS_ID(base_id))
+        if base is None:
+            continue
+        ivd: list[InternalVirtualDriver] = getattr(base, InternalVirtualDriver.identifier)
+        index: int = getattr(base, VirtualDriverIndex.identifier)
+        if not ivd or index < 0:
+            continue
+        ivds.append(ivd)
+
+    if not ivds:
         return
 
     _VIRTUALDRIVER_UPDATE_LOCK = True
 
-    for block in ivd:
-        if not block.is_valid:
-            continue
+    for ivd in ivds:
+        for block in ivd:
+            if not block.is_valid:
+                continue
 
-        anim = property_tracer.animatable(block.id, block.data_path)
-        if anim is None:
-            block.is_valid = False
-            return
-        if anim.array_index is None:
-            setattr(anim.id.original.path_resolve(anim.rna_path) if anim.rna_path else anim.id.original, anim.prop_path, block.prop)
-        else:
-            getattr(anim.id.original.path_resolve(anim.rna_path) if anim.rna_path else anim.id.original, anim.prop_path)[anim.array_index] = block.prop
+            anim = property_tracer.animatable(block.id, block.data_path)
+            if anim is None:
+                block.is_valid = False
+                return
+            if anim.array_index is None:
+                setattr(anim.id.original.path_resolve(anim.rna_path) if anim.rna_path else anim.id.original, anim.prop_path, block.prop)
+            else:
+                getattr(anim.id.original.path_resolve(anim.rna_path) if anim.rna_path else anim.id.original, anim.prop_path)[anim.array_index] = block.prop
 
     _VIRTUALDRIVER_UPDATE_LOCK = False
 
