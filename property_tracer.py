@@ -492,7 +492,7 @@ base_paths = {
 def preregister(
     base_type: bpy.types.bpy_struct = base_type,
     base_access_context: Callable[[bpy.types.Context], bpy.types.bpy_struct] = base_access_context
-):
+) -> None:
     global _PROPTRACE_BASE_TYPE, _PROPTRACE_BASE_ACCESS_CONTEXT, _PROPTRACE_BASE_PATHS
     _PROPTRACE_BASE_TYPE = base_type
     _PROPTRACE_BASE_ACCESS_CONTEXT = base_access_context
