@@ -382,7 +382,10 @@ def property_tracer_update(context: bpy.types.Context, identifier: str) -> None:
     if not ipt or index < 0:
         return
     block = ipt[index]
+
+    # TODO: mode set trace
     setattr(block, identifier, getattr(pt, identifier))
+    # TODO: mode reset
 
 def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.types.Context) -> None:
     base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
@@ -395,6 +398,7 @@ def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.ty
         return
     block = ipt[index]
 
+    # TODO: mode set back trace
     temp_id = block.id
     pt.index = block.index
     pt.name = block.name
@@ -402,6 +406,7 @@ def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.ty
     pt.id = temp_id
     pt.data_path = block.data_path
     pt.prop = block.prop
+    # TODO: mode reset
 
 
 # operators
