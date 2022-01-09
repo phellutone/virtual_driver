@@ -372,6 +372,28 @@ class InternalPropTrace(bpy.types.PropertyGroup):
 class InternalPropTraceIndex:
     identifier: Literal['active_internal_prop_trace_index'] = 'active_internal_prop_trace_index'
 
+_PROPTRACE_TRACE_LOCK: bool = False
+def trace(
+    block: InternalPropTrace,
+    identifier: str,
+    pt: PropertyTracer,
+    direction: bool=True,
+    is_set_value: bool=False,
+    value: Any=None
+) -> None:
+    global _PROPTRACE_TRACE_LOCK
+    if _PROPTRACE_TRACE_LOCK:
+        return
+
+    _PROPTRACE_TRACE_LOCK = True
+
+    if direction:
+        setattr(block, identifier, getattr(pt, identifier) if not is_set_value else value)
+    else:
+        setattr(pt, identifier, getattr(block, identifier) if not is_set_value else value)
+
+    _PROPTRACE_TRACE_LOCK = False
+
 def property_tracer_update(context: bpy.types.Context, identifier: str) -> None:
     base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
     if base is None:
@@ -383,9 +405,7 @@ def property_tracer_update(context: bpy.types.Context, identifier: str) -> None:
         return
     block = ipt[index]
 
-    # TODO: mode set trace
-    setattr(block, identifier, getattr(pt, identifier))
-    # TODO: mode reset
+    trace(block, identifier, pt)
 
 def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.types.Context) -> None:
     base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
@@ -398,15 +418,14 @@ def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.ty
         return
     block = ipt[index]
 
-    # TODO: mode set back trace
     temp_id = block.id
-    pt.index = block.index
-    pt.name = block.name
-    pt.id_type = block.id_type
-    pt.id = temp_id
-    pt.data_path = block.data_path
-    pt.prop = block.prop
-    # TODO: mode reset
+
+    trace(block, 'index', pt, True)
+    trace(block, 'name', pt, True)
+    trace(block, 'id_type', pt, True)
+    trace(block, 'id', pt, True, True, temp_id)
+    trace(block, 'data_path', pt, True)
+    trace(block, 'prop', pt, True)
 
 
 # operators
