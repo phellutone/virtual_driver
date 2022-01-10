@@ -1,5 +1,5 @@
 
-# master/develop
+# master/develop/feature/vd-modulize
 
 bl_info = {
     'name': 'virtual driver',
