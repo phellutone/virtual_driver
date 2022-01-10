@@ -1,10 +1,10 @@
 
-# master/develop/
+# master
 
 bl_info = {
     'name': 'virtual driver',
     'author': 'phellutone',
-    'version': (0, 0, 1),
+    'version': (0, 1, 0),
     'blender': (2, 93, 0),
     'location': 'View3D > Sidebar > Tool Tab',
     'description': 'virtual driver',
