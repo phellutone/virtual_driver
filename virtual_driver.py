@@ -3,6 +3,12 @@ from typing import Callable, Literal, Union
 import bpy
 from . import property_tracer
 
+_VIRTUALDRIVER_BASE_TYPE_ID: bpy.types.ID = None
+_VIRTUALDRIVER_BASE_TYPE_PARENT: bpy.types.bpy_struct = None
+_VIRTUALDRIVER_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context], bpy.types.bpy_struct] = None
+_VIRTUALDRIVER_BASE_ACCESS_ID: Callable[[bpy.types.ID], bpy.types.bpy_struct] = None
+_VIRTUALDRIVER_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
+
 
 class VirtualDriver(property_tracer.PropertyTracer):
     identifier: Literal['virtual_driver'] = 'virtual_driver'
@@ -29,7 +35,7 @@ class VIRTUALDRIVER_OT_remove(property_tracer.PROPTRACE_OT_remove):
 
 
 class OBJECT_UL_VirtualDriver(bpy.types.UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index) -> None:
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row(align=True)
             row.prop(item, 'name', icon='ANIM', text='', emboss=False)
@@ -46,7 +52,7 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
     bl_label = 'Virtual Driver'
     bl_options = {'DEFAULT_CLOSED'}
 
-    def draw(self, context: bpy.types.Context):
+    def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
         base = property_tracer.prop_trace_base_access_check(_VIRTUALDRIVER_BASE_ACCESS_CONTEXT(context))
         if base is None:
@@ -91,16 +97,6 @@ def virtual_driver_base_access_context(context: bpy.types.Context) -> Union[bpy.
 def virtual_driver_base_access_id(id: bpy.types.ID) -> Union[bpy.types.bpy_struct, None]:
     if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID):
         return id
-
-_VIRTUALDRIVER_BASE_TYPE_ID: bpy.types.ID = bpy.types.Scene
-_VIRTUALDRIVER_BASE_TYPE_PARENT: bpy.types.bpy_struct = bpy.types.Scene
-_VIRTUALDRIVER_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context], bpy.types.bpy_struct] = virtual_driver_base_access_context
-_VIRTUALDRIVER_BASE_ACCESS_ID: Callable[[bpy.types.ID], bpy.types.bpy_struct] = virtual_driver_base_access_id
-_VIRTUALDRIVER_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = {
-    VirtualDriver.identifier: bpy.props.PointerProperty(type=VirtualDriver),
-    InternalVirtualDriver.identifier: bpy.props.CollectionProperty(type=InternalVirtualDriver),
-    VirtualDriverIndex.identifier: bpy.props.IntProperty(update=property_tracer.internal_prop_trace_index_update)
-}
 
 classes = (
     VirtualDriver,
@@ -153,8 +149,32 @@ def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph
 
     _VIRTUALDRIVER_UPDATE_LOCK = False
 
+base_type_id = bpy.types.Scene
+base_type_parent = bpy.types.Scene
+base_access_context = virtual_driver_base_access_context
+base_access_id = virtual_driver_base_access_id
+base_paths = {
+    VirtualDriver.identifier: bpy.props.PointerProperty(type=VirtualDriver),
+    InternalVirtualDriver.identifier: bpy.props.CollectionProperty(type=InternalVirtualDriver),
+    VirtualDriverIndex.identifier: bpy.props.IntProperty(update=property_tracer.internal_prop_trace_index_update)
+}
+
+def preregister(
+    base_type_id: bpy.types.ID = base_type_id,
+    base_type_parent: bpy.types.bpy_struct = base_type_parent,
+    base_access_context: Callable[[bpy.types.Context], bpy.types.bpy_struct] = base_access_context,
+    base_access_id: Callable[[bpy.types.ID], bpy.types.bpy_struct] = base_access_id
+) -> None:
+    global _VIRTUALDRIVER_BASE_TYPE_ID, _VIRTUALDRIVER_BASE_TYPE_PARENT, _VIRTUALDRIVER_BASE_ACCESS_CONTEXT, _VIRTUALDRIVER_BASE_ACCESS_ID, _VIRTUALDRIVER_BASE_PATHS
+    _VIRTUALDRIVER_BASE_TYPE_ID = base_type_id
+    _VIRTUALDRIVER_BASE_TYPE_PARENT = base_type_parent
+    _VIRTUALDRIVER_BASE_ACCESS_CONTEXT = base_access_context
+    _VIRTUALDRIVER_BASE_ACCESS_ID = base_access_id
+    _VIRTUALDRIVER_BASE_PATHS = base_paths
+    property_tracer.preregister(base_type_parent, base_access_context)
+
 def register():
-    property_tracer.preregister(_VIRTUALDRIVER_BASE_TYPE_PARENT, _VIRTUALDRIVER_BASE_ACCESS_CONTEXT)
+    preregister()
 
     for cls in classes:
         bpy.utils.register_class(cls)
