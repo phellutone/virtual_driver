@@ -362,7 +362,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
 class InternalPropTrace(bpy.types.PropertyGroup):
     identifier: Literal['internal_prop_trace'] = 'internal_prop_trace'
 
-    def is_valid_update(self, context: bpy.types.Context):
+    def is_valid_update(self, context: bpy.types.Context) -> None:
         if not self.is_valid:
             return
         anim = animatable(self.id, self.data_path)
@@ -375,16 +375,16 @@ class InternalPropTrace(bpy.types.PropertyGroup):
             self.prop = getattr(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path)[anim.array_index]
         internal_prop_trace_update(self, context, 'is_valid')
 
-    def id_type_update(self, context: bpy.types.Context):
+    def id_type_update(self, context: bpy.types.Context) -> None:
         self.is_valid = isinstance(self.id, _PROPTRACE_ID_TYPE_PYTYPE[self.id_type])
         internal_prop_trace_update(self, context, 'id_type')
 
-    def id_update(self, context: bpy.types.Context):
+    def id_update(self, context: bpy.types.Context) -> None:
         anim = animatable(self.id, self.data_path)
         self.is_valid = not anim is None
         internal_prop_trace_update(self, context, 'id')
 
-    def data_path_update(self, context: bpy.types.Context):
+    def data_path_update(self, context: bpy.types.Context) -> None:
         anim = animatable(self.id, self.data_path)
         self.is_valid = not anim is None
         internal_prop_trace_update(self, context, 'data_path')
