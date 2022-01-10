@@ -360,28 +360,28 @@ class InternalPropTrace(bpy.types.PropertyGroup):
     identifier: Literal['internal_prop_trace'] = 'internal_prop_trace'
 
     name: bpy.props.StringProperty(
-        update=lambda self, context: internal_prop_trace_update(context, 'name', self.index)
+        update=lambda self, context: internal_prop_trace_update(self, context, 'name')
     )
     index: bpy.props.IntProperty()
     is_valid: bpy.props.BoolProperty(
-        update=lambda self, context: internal_prop_trace_update(context, 'is_valid', self.index)
+        update=lambda self, context: internal_prop_trace_update(self, context, 'is_valid')
     )
     id_type: bpy.props.StringProperty(
-        update=lambda self, context: internal_prop_trace_update(context, 'id_type', self.index)
+        update=lambda self, context: internal_prop_trace_update(self, context, 'id_type')
     )
     id: bpy.props.PointerProperty(
         type=bpy.types.ID,
-        update=lambda self, context: internal_prop_trace_update(context, 'id', self.index)
+        update=lambda self, context: internal_prop_trace_update(self, context, 'id')
     )
     data_path: bpy.props.StringProperty(
-        update=lambda self, context: internal_prop_trace_update(context, 'data_path', self.index)
+        update=lambda self, context: internal_prop_trace_update(self, context, 'data_path')
     )
 
     prop_type: bpy.props.StringProperty(
-        update=lambda self, context: internal_prop_trace_update(context, 'prop_type', self.index)
+        update=lambda self, context: internal_prop_trace_update(self, context, 'prop_type')
     )
     prop: bpy.props.FloatProperty(
-        update=lambda self, context: internal_prop_trace_update(context, 'prop', self.index)
+        update=lambda self, context: internal_prop_trace_update(self, context, 'prop')
     )
 
 class InternalPropTraceIndex:
@@ -422,7 +422,7 @@ def property_tracer_update(context: bpy.types.Context, identifier: str) -> None:
 
     trace(block, identifier, pt, True)
 
-def internal_prop_trace_update(context: bpy.types.Context, identifier: str, idx: int) -> None:
+def internal_prop_trace_update(self: InternalPropTrace, context: bpy.types.Context, identifier: str) -> None:
     base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
     if base is None:
         return
@@ -431,7 +431,7 @@ def internal_prop_trace_update(context: bpy.types.Context, identifier: str, idx:
     index: int = getattr(base, InternalPropTraceIndex.identifier)
     if not ipt or index < 0:
         return
-    if not index is idx:
+    if not index is self.index:
         return
     block = ipt[index]
 
