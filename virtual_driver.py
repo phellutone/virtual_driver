@@ -98,20 +98,19 @@ def virtual_driver_base_access_id(id: bpy.types.ID) -> Union[bpy.types.bpy_struc
     if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID):
         return id
 
-classes = (
-    VirtualDriver,
-    InternalVirtualDriver,
-    VIRTUALDRIVER_OT_add,
-    VIRTUALDRIVER_OT_remove,
-    OBJECT_UL_VirtualDriver,
-    OBJECT_PT_VirtualDriver
-)
+def back_tracer(obj: bpy.types.bpy_struct, name: str, value: Any, array_index: Union[int, None]) -> None:
+    if array_index is None:
+        setattr(obj, name, value)
+    else:
+        getattr(obj, name)[array_index] = value
 
 _VIRTUALDRIVER_UPDATE_LOCK: bool = False
 def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
     global _VIRTUALDRIVER_UPDATE_LOCK
     if _VIRTUALDRIVER_UPDATE_LOCK:
         return
+
+    # TODO: check and track driver
 
     updates: list[bpy.types.DepsgraphUpdate] = depsgraph.updates
     ids = [u.id.original for u in updates if isinstance(u.id, _VIRTUALDRIVER_BASE_TYPE_ID)]
@@ -147,12 +146,6 @@ def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph
 
     _VIRTUALDRIVER_UPDATE_LOCK = False
 
-def back_tracer(obj: bpy.types.bpy_struct, name: str, value: Any, array_index: Union[int, None]) -> None:
-    if array_index is None:
-        setattr(obj, name, value)
-    else:
-        getattr(obj, name)[array_index] = value
-
 base_type_id = bpy.types.Scene
 base_type_parent = bpy.types.Scene
 base_access_context = virtual_driver_base_access_context
@@ -176,6 +169,15 @@ def preregister(
     _VIRTUALDRIVER_BASE_ACCESS_ID = base_access_id
     _VIRTUALDRIVER_BASE_PATHS = base_paths
     property_tracer.preregister(base_type_parent, base_access_context)
+
+classes = (
+    VirtualDriver,
+    InternalVirtualDriver,
+    VIRTUALDRIVER_OT_add,
+    VIRTUALDRIVER_OT_remove,
+    OBJECT_UL_VirtualDriver,
+    OBJECT_PT_VirtualDriver
+)
 
 def register():
     preregister()
