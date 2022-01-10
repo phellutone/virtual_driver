@@ -1,5 +1,5 @@
 
-from typing import Callable, Literal, Union
+from typing import Any, Callable, Literal, Union
 import bpy
 from . import property_tracer
 
@@ -113,7 +113,8 @@ def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph
     if _VIRTUALDRIVER_UPDATE_LOCK:
         return
 
-    ids = [u.id for u in depsgraph.updates if isinstance(u.id, _VIRTUALDRIVER_BASE_TYPE_ID)]
+    updates: list[bpy.types.DepsgraphUpdate] = depsgraph.updates
+    ids = [u.id.original for u in updates if isinstance(u.id, _VIRTUALDRIVER_BASE_TYPE_ID)]
     if not ids:
         return
 
@@ -142,12 +143,15 @@ def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph
             if anim is None:
                 block.is_valid = False
                 return
-            if anim.array_index is None:
-                setattr(anim.id.original.path_resolve(anim.rna_path) if anim.rna_path else anim.id.original, anim.prop_path, block.prop)
-            else:
-                getattr(anim.id.original.path_resolve(anim.rna_path) if anim.rna_path else anim.id.original, anim.prop_path)[anim.array_index] = block.prop
+            back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, block.prop, anim.array_index)
 
     _VIRTUALDRIVER_UPDATE_LOCK = False
+
+def back_tracer(obj: bpy.types.bpy_struct, name: str, value: Any, array_index: Union[int, None]) -> None:
+    if array_index is None:
+        setattr(obj, name, value)
+    else:
+        getattr(obj, name)[array_index] = value
 
 base_type_id = bpy.types.Scene
 base_type_parent = bpy.types.Scene
