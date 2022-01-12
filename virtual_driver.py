@@ -12,19 +12,90 @@ _VIRTUALDRIVER_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
 
 class VirtualDriver(property_tracer.PropertyTracer):
     identifier: Literal['virtual_driver'] = 'virtual_driver'
+
+    def has_driver_update(self, context: bpy.types.Context):
+        if not self.has_driver or not self.is_valid:
+            return
+        anim = property_tracer.animatable(self.id, self.data_path)
+        if anim is None:
+            self.is_valid = False
+            self.has_driver = False
+            return
+        fcurve = fcurve_observer(anim)
+        if fcurve is None:
+            self.has_driver = False
+            return
+        virtual_driver_update(self, context)
+
     mute: bpy.props.BoolProperty()
+    has_driver: bpy.props.BoolProperty(
+        update=has_driver_update
+    )
 
 class InternalVirtualDriver(property_tracer.InternalPropTrace):
     identifier: Literal['internal_virtual_driver'] = 'internal_virtual_driver'
+
+    def has_driver_update(self, context: bpy.types.Context):
+        if not self.has_driver or not self.is_valid:
+            return
+        anim = property_tracer.animatable(self.id, self.data_path)
+        if anim is None:
+            self.is_valid = False
+            self.has_driver = False
+            return
+        fcurve = fcurve_observer(anim)
+        if fcurve is None:
+            self.has_driver = False
+            return
+        internal_virtual_driver_update(self, context)
+
     mute: bpy.props.BoolProperty()
+    has_driver: bpy.props.BoolProperty()
 
 class VirtualDriverIndex(property_tracer.InternalPropTraceIndex):
     identifier: Literal['active_virtual_driver_index'] = 'active_virtual_driver_index'
 
+class TraceMode(property_tracer.TraceMode): ...
 
 property_tracer.PropertyTracer.identifier = VirtualDriver.identifier
 property_tracer.InternalPropTrace.identifier = InternalVirtualDriver.identifier
 property_tracer.InternalPropTraceIndex.identifier = VirtualDriverIndex.identifier
+
+_VIRTUALDRIVER_TRACE_MODE: TraceMode = TraceMode.none
+
+def virtual_driver_update(self: VirtualDriver, context: bpy.types.Context, identifier: str):
+    global _VIRTUALDRIVER_TRACE_MODE
+    if _VIRTUALDRIVER_TRACE_MODE is TraceMode.direct:
+        return
+
+    base, vd, ivd, index, block = get_context_props(context)
+
+    _VIRTUALDRIVER_TRACE_MODE = TraceMode.panel
+    setattr(block, identifier, getattr(vd, identifier))
+    _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
+
+def internal_virtual_driver_update(self: InternalVirtualDriver, context: bpy.types.Context, identifier: str):
+    global _VIRTUALDRIVER_TRACE_MODE
+    if _VIRTUALDRIVER_TRACE_MODE is TraceMode.panel:
+        return
+
+    base, vd, ivd, index, block = get_context_props(context)
+
+    _VIRTUALDRIVER_TRACE_MODE = TraceMode.direct
+    setattr(vd, identifier, getattr(block, identifier))
+    _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
+
+def virtual_driver_index_update(self: bpy.types.bpy_struct, context: bpy.types.Context):
+    property_tracer.internal_prop_trace_index_update(self, context)
+
+def fcurve_observer(anim: property_tracer.Interpretation) -> Union[bpy.types.FCurve, None]:
+    if not hasattr(anim.id, 'animation_data'):
+        return
+    anim_data: bpy.types.AnimData = anim.id.animation_data
+    if anim_data is None:
+        return
+    anim_data_driver: bpy.types.AnimDataDrivers = anim_data.drivers
+    return anim_data_driver.find(anim.prop_path, 0 if anim.array_index is None else anim.array_index)
 
 
 class VIRTUALDRIVER_OT_add(property_tracer.PROPTRACE_OT_add):
@@ -54,12 +125,9 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
 
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
-        base = property_tracer.prop_trace_base_access_check(_VIRTUALDRIVER_BASE_ACCESS_CONTEXT(context))
+        base, vd, ivd, index, block = get_context_props(context)
         if base is None:
             return
-        vd: VirtualDriver = getattr(base, VirtualDriver.identifier)
-        ivd: list[InternalVirtualDriver] = getattr(base, InternalVirtualDriver.identifier)
-        index: int = getattr(base, VirtualDriverIndex.identifier)
 
         row = layout.row()
         row.template_list(
@@ -89,6 +157,26 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
 
 
 
+def get_context_props(
+    data: Union[bpy.types.Context, bpy.types.ID]
+) -> tuple[
+    Union[bpy.types.bpy_struct, None],
+    Union[VirtualDriver, None],
+    Union[list[InternalVirtualDriver], None],
+    Union[int, None],
+    Union[InternalVirtualDriver, None]
+]:
+    base = _VIRTUALDRIVER_BASE_ACCESS_CONTEXT(data) if isinstance(data, bpy.types.Context) else _VIRTUALDRIVER_BASE_ACCESS_ID(data)
+    if not isinstance(base, _VIRTUALDRIVER_BASE_TYPE_PARENT):
+        return None, None, None, None, None
+    vd: Union[VirtualDriver, None] = getattr(base, VirtualDriver.identifier, None)
+    ivd: Union[list[InternalVirtualDriver], None] = getattr(base, InternalVirtualDriver.identifier, None)
+    index: Union[int, None] = getattr(base, VirtualDriverIndex.identifier, None)
+    if ivd is None or index is None:
+        return base, vd, ivd, index, None
+    block: Union[InternalVirtualDriver, None] = ivd[index] if ivd and index >= 0 else None
+    return base, vd, ivd, index, block
+
 def virtual_driver_base_access_context(context: bpy.types.Context) -> Union[bpy.types.bpy_struct, None]:
     if isinstance(context, bpy.types.Context):
         if hasattr(context, 'scene'):
@@ -105,12 +193,23 @@ def back_tracer(obj: bpy.types.bpy_struct, name: str, value: Any, array_index: U
         getattr(obj, name)[array_index] = value
 
 _VIRTUALDRIVER_UPDATE_LOCK: bool = False
-def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
+def virtual_driver_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
     global _VIRTUALDRIVER_UPDATE_LOCK
     if _VIRTUALDRIVER_UPDATE_LOCK:
         return
 
     # TODO: check and track driver
+    # def:
+    #     id.animation_data.driversからfcurveの増減を確認、プロパティに反映
+    #     プロパティ反映時のハンドリングブロック
+    # def:
+    #     プロパティの更新からfcurveの相互トレース
+    #         fcurveをコピーしてdata_pathをinternal/panelに変更
+    #     削除
+    #         削除
+    #     更新
+    #         再生成が手っ取り早い、driverの更新位置の特定は複雑でglobalな変数の多用に繋がる
+    #     validate
 
     updates: list[bpy.types.DepsgraphUpdate] = depsgraph.updates
     ids = [u.id.original for u in updates if isinstance(u.id, _VIRTUALDRIVER_BASE_TYPE_ID)]
@@ -119,14 +218,9 @@ def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph
 
     ivds: list[list[InternalVirtualDriver]] = []
     for base_id in ids:
-        base = property_tracer.prop_trace_base_access_check(_VIRTUALDRIVER_BASE_ACCESS_ID(base_id))
-        if base is None:
-            continue
-        ivd: list[InternalVirtualDriver] = getattr(base, InternalVirtualDriver.identifier)
-        index: int = getattr(base, VirtualDriverIndex.identifier)
-        if not ivd or index < 0:
-            continue
-        ivds.append(ivd)
+        base, vd, ivd, index, block = get_context_props(base_id)
+        if ivd:
+            ivds.append(ivd)
 
     if not ivds:
         return
@@ -142,6 +236,8 @@ def virtual_driver_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph
             if anim is None:
                 block.is_valid = False
                 return
+            if block.mute:
+                return
             back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, block.prop, anim.array_index)
 
     _VIRTUALDRIVER_UPDATE_LOCK = False
@@ -153,7 +249,7 @@ base_access_id = virtual_driver_base_access_id
 base_paths = {
     VirtualDriver.identifier: bpy.props.PointerProperty(type=VirtualDriver),
     InternalVirtualDriver.identifier: bpy.props.CollectionProperty(type=InternalVirtualDriver),
-    VirtualDriverIndex.identifier: bpy.props.IntProperty(update=property_tracer.internal_prop_trace_index_update)
+    VirtualDriverIndex.identifier: bpy.props.IntProperty(update=virtual_driver_index_update)
 }
 
 def preregister(
@@ -188,8 +284,8 @@ def register():
     for identifier in _VIRTUALDRIVER_BASE_PATHS:
         setattr(_VIRTUALDRIVER_BASE_TYPE_PARENT, identifier, _VIRTUALDRIVER_BASE_PATHS[identifier])
 
-    if not virtual_driver_update in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.append(virtual_driver_update)
+    if not virtual_driver_depsgraph_update in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(virtual_driver_depsgraph_update)
 
 def unregister():
     for cls in classes:
@@ -198,5 +294,5 @@ def unregister():
     for identifier in _VIRTUALDRIVER_BASE_PATHS:
         delattr(_VIRTUALDRIVER_BASE_TYPE_PARENT, identifier)
 
-    if virtual_driver_update in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.remove(virtual_driver_update)
+    if virtual_driver_depsgraph_update in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(virtual_driver_depsgraph_update)
