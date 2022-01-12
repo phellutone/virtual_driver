@@ -14,7 +14,9 @@ class VirtualDriver(property_tracer.PropertyTracer):
     identifier: Literal['virtual_driver'] = 'virtual_driver'
 
     def has_driver_update(self, context: bpy.types.Context):
-        if not self.has_driver or not self.is_valid:
+        if not self.is_valid:
+            return
+        if not self.has_driver:
             return
         anim = property_tracer.animatable(self.id, self.data_path)
         if anim is None:
@@ -36,7 +38,9 @@ class InternalVirtualDriver(property_tracer.InternalPropTrace):
     identifier: Literal['internal_virtual_driver'] = 'internal_virtual_driver'
 
     def has_driver_update(self, context: bpy.types.Context):
-        if not self.has_driver or not self.is_valid:
+        if not self.is_valid:
+            return
+        if not self.has_driver:
             return
         anim = property_tracer.animatable(self.id, self.data_path)
         if anim is None:
