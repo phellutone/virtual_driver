@@ -1,4 +1,5 @@
 
+import enum
 from typing import Any, Callable, Literal, Union
 import bpy
 from . import property_tracer
@@ -23,11 +24,11 @@ class VirtualDriver(property_tracer.PropertyTracer):
             self.is_valid = False
             self.has_driver = False
             return
-        fcurve = fcurve_observer(anim)
+        fcurve = get_fcurve(self.id_data, self.path_from_id('prop'))
         if fcurve is None:
             self.has_driver = False
             return
-        virtual_driver_update(self, context)
+        virtual_driver_update(self, context, 'has_driver')
 
     mute: bpy.props.BoolProperty()
     has_driver: bpy.props.BoolProperty(
@@ -47,19 +48,24 @@ class InternalVirtualDriver(property_tracer.InternalPropTrace):
             self.is_valid = False
             self.has_driver = False
             return
-        fcurve = fcurve_observer(anim)
+        fcurve = get_fcurve(self.id_data, self.path_from_id('prop'))
         if fcurve is None:
             self.has_driver = False
             return
-        internal_virtual_driver_update(self, context)
+        internal_virtual_driver_update(self, context, 'has_driver')
 
     mute: bpy.props.BoolProperty()
-    has_driver: bpy.props.BoolProperty()
+    has_driver: bpy.props.BoolProperty(
+        update=has_driver_update
+    )
 
 class VirtualDriverIndex(property_tracer.InternalPropTraceIndex):
     identifier: Literal['active_virtual_driver_index'] = 'active_virtual_driver_index'
 
-class TraceMode(property_tracer.TraceMode): ...
+class TraceMode(enum.Enum):
+    direct = property_tracer.TraceMode.direct
+    panel = property_tracer.TraceMode.panel
+    none = property_tracer.TraceMode.none
 
 property_tracer.PropertyTracer.identifier = VirtualDriver.identifier
 property_tracer.InternalPropTrace.identifier = InternalVirtualDriver.identifier
@@ -75,6 +81,7 @@ def virtual_driver_update(self: VirtualDriver, context: bpy.types.Context, ident
     base, vd, ivd, index, block = get_context_props(context)
 
     _VIRTUALDRIVER_TRACE_MODE = TraceMode.panel
+    trace_fcurve(vd.id_data, vd.path_from_id('prop'), block.path_from_id('prop'))
     setattr(block, identifier, getattr(vd, identifier))
     _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
 
@@ -86,20 +93,40 @@ def internal_virtual_driver_update(self: InternalVirtualDriver, context: bpy.typ
     base, vd, ivd, index, block = get_context_props(context)
 
     _VIRTUALDRIVER_TRACE_MODE = TraceMode.direct
+    trace_fcurve(block.id_data, block.path_from_id('prop'), vd.path_from_id('prop'))
     setattr(vd, identifier, getattr(block, identifier))
     _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
 
 def virtual_driver_index_update(self: bpy.types.bpy_struct, context: bpy.types.Context):
-    property_tracer.internal_prop_trace_index_update(self, context)
-
-def fcurve_observer(anim: property_tracer.Interpretation) -> Union[bpy.types.FCurve, None]:
-    if not hasattr(anim.id, 'animation_data'):
+    global _VIRTUALDRIVER_TRACE_MODE
+    if _VIRTUALDRIVER_TRACE_MODE is TraceMode.panel:
         return
-    anim_data: bpy.types.AnimData = anim.id.animation_data
+
+    _VIRTUALDRIVER_TRACE_MODE = TraceMode.direct
+    property_tracer.internal_prop_trace_index_update(self, context)
+    _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
+
+def get_fcurve(id: bpy.types.ID, data_path: str) -> Union[bpy.types.FCurve, None]:
+    if not hasattr(id, 'animation_data'):
+        return
+    anim_data: bpy.types.AnimData = id.animation_data
     if anim_data is None:
         return
-    anim_data_driver: bpy.types.AnimDataDrivers = anim_data.drivers
-    return anim_data_driver.find(anim.prop_path, 0 if anim.array_index is None else anim.array_index)
+    anim_data_driver: list[bpy.types.FCurve] = anim_data.drivers
+    fcurves = [f for f in anim_data_driver if f.data_path == data_path]
+    if not fcurves:
+        return
+    if len(fcurves) > 1:
+        return
+    return fcurves[0]
+
+def trace_fcurve(id: bpy.types.ID, data_path: str, copy_path: str):
+    fcurve = get_fcurve(id, data_path)
+    if fcurve is None:
+        return
+    anim_data: bpy.types.AnimData = id.animation_data
+    copy = anim_data.drivers.from_existing(src_driver=fcurve)
+    copy.data_path = copy_path
 
 
 class VIRTUALDRIVER_OT_add(property_tracer.PROPTRACE_OT_add):
@@ -239,9 +266,9 @@ def virtual_driver_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types
             anim = property_tracer.animatable(block.id, block.data_path)
             if anim is None:
                 block.is_valid = False
-                return
+                continue
             if block.mute:
-                return
+                continue
             back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, block.prop, anim.array_index)
 
     _VIRTUALDRIVER_UPDATE_LOCK = False
