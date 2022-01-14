@@ -16,8 +16,7 @@ class FCurveObserverState(enum.Enum):
 
 class FCurveObserver(bpy.types.PropertyGroup):
     def fcurve_update(self, context: bpy.types.Context) -> None:
-        anim = parser_for_fcurve(animatable(self.id_data, self.path_from_id('prop')))
-        fcurves = None if anim is None else get(*anim)
+        fcurves = get(self.id_data, self.path_from_id('prop'), 0)
         if fcurves is None:
             if self.fcurve:
                 # no fcurve and prop is true so set prop to false, recursive called but nothig do
@@ -25,7 +24,7 @@ class FCurveObserver(bpy.types.PropertyGroup):
         else:
             if not self.fcurve:
                 # exist fcurve and prop is false so delete fcurve
-                delete(*anim)
+                delete(self.id_data, self.path_from_id('prop'), 0)
 
     fcurve: bpy.props.BoolProperty(
         update=fcurve_update
@@ -33,6 +32,7 @@ class FCurveObserver(bpy.types.PropertyGroup):
 
     id: bpy.props.PointerProperty(type=bpy.types.ID)
     data_path: bpy.props.StringProperty()
+    prop: bpy.props.FloatProperty()
 
 def parser_for_fcurve(anim: Interpretation) -> Union[tuple[bpy.types.ID, str, int], None]:
     if anim is None:
