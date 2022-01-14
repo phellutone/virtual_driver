@@ -2,6 +2,7 @@
 import enum
 from typing import Any, Callable, Literal, Union
 import bpy
+from . import utils
 from . import property_tracer
 from . import fcurve_observer
 
@@ -168,6 +169,19 @@ def virtual_driver_base_access_id(id: bpy.types.ID) -> Union[bpy.types.bpy_struc
     if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID):
         return id
 
+def fcurve_trace(pfrom: Union[VirtualDriver, InternalVirtualDriver], pto: Union[VirtualDriver, InternalVirtualDriver]):
+    fcurves = fcurve_observer.get(pfrom.id_data, pfrom.path_from_id('prop'), 0)
+    if fcurves is None:
+        pfrom.fcurve = False
+        return
+    if isinstance(fcurves, list):
+        return
+    anim_data: bpy.types.AnimData = getattr(pto.id_data, 'animation_data')
+    anim_data_drivers: bpy.types.AnimDataDrivers = anim_data.drivers
+    fcopy = anim_data_drivers.from_existing(src_driver=fcurves)
+    fcopy.data_path = pto.path_from_id('prop')
+    pto.fcurve = True
+
 def back_tracer(obj: bpy.types.bpy_struct, name: str, value: Any, array_index: Union[int, None]) -> None:
     if array_index is None:
         setattr(obj, name, value)
@@ -198,29 +212,31 @@ def virtual_driver_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types
     if not ids:
         return
 
-    ivds: list[list[InternalVirtualDriver]] = []
-    for base_id in ids:
-        base, vd, ivd, index, block = get_context_props(base_id)
-        if ivd:
-            ivds.append(ivd)
-
-    if not ivds:
-        return
-
     _VIRTUALDRIVER_UPDATE_LOCK = True
 
-    for ivd in ivds:
-        for block in ivd:
-            if not block.is_valid:
-                continue
+    for base_id in ids:
+        base, vd, ivd, index, block = get_context_props(base_id)
+        if vd is None or block is None:
+            continue
 
-            anim = property_tracer.animatable(block.id, block.data_path)
-            if anim is None:
-                block.is_valid = False
-                continue
-            if block.mute:
-                continue
-            back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, block.prop, anim.array_index)
+        if not block.is_valid:
+            continue
+
+        vd.fcurve = True
+        block.fcurve = True
+
+        # if vd.fcurve and not block.fcurve:
+        #     fcurve_trace(vd, block)
+        # if not vd.fcurve and block.fcurve:
+        #     fcurve_trace(block, vd)
+
+        anim = utils.animatable(block.id, block.data_path)
+        if anim is None:
+            block.is_valid = False
+            continue
+        if block.mute:
+            continue
+        back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, block.prop, anim.array_index)
 
     _VIRTUALDRIVER_UPDATE_LOCK = False
 
