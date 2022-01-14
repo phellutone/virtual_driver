@@ -14,11 +14,15 @@ _VIRTUALDRIVER_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
 
 class VirtualDriver(property_tracer.PropertyTracer, fcurve_observer.FCurveObserver):
     identifier: Literal['virtual_driver'] = 'virtual_driver'
-    mute: bpy.props.BoolProperty()
+    mute: bpy.props.BoolProperty(
+        update=lambda self, context: virtual_driver_update(self, context, 'mute')
+    )
 
 class InternalVirtualDriver(property_tracer.InternalPropTrace, fcurve_observer.FCurveObserver):
     identifier: Literal['internal_virtual_driver'] = 'internal_virtual_driver'
-    mute: bpy.props.BoolProperty()
+    mute: bpy.props.BoolProperty(
+        update=lambda self, context: internal_virtual_driver_update(self, context, 'mute')
+    )
 
 class VirtualDriverIndex(property_tracer.InternalPropTraceIndex):
     identifier: Literal['active_virtual_driver_index'] = 'active_virtual_driver_index'
@@ -34,13 +38,44 @@ property_tracer.InternalPropTraceIndex.identifier = VirtualDriverIndex.identifie
 
 _VIRTUALDRIVER_TRACE_MODE: TraceMode = TraceMode.none
 
+def virtual_driver_update(self: VirtualDriver, context: bpy.types.Context, identifier: str):
+    global _VIRTUALDRIVER_TRACE_MODE
+    if _VIRTUALDRIVER_TRACE_MODE is TraceMode.direct:
+        return
+
+    base, vd, ivd, index, block = get_context_props(context)
+    if block is None:
+        return
+
+    _VIRTUALDRIVER_TRACE_MODE = TraceMode.panel
+    setattr(block, identifier, getattr(vd, identifier))
+    _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
+
+def internal_virtual_driver_update(self: InternalVirtualDriver, context: bpy.types.Context, identifier: str):
+    global _VIRTUALDRIVER_TRACE_MODE
+    if _VIRTUALDRIVER_TRACE_MODE is TraceMode.panel:
+        return
+
+    base, vd, ivd, index, block = get_context_props(context)
+    if block is None:
+        return
+
+    _VIRTUALDRIVER_TRACE_MODE = TraceMode.direct
+    setattr(vd, identifier, getattr(block, identifier))
+    _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
+
 def virtual_driver_index_update(self: bpy.types.bpy_struct, context: bpy.types.Context):
     global _VIRTUALDRIVER_TRACE_MODE
     if _VIRTUALDRIVER_TRACE_MODE is TraceMode.panel:
         return
 
+    base, vd, ivd, index, block = get_context_props(context)
+    if block is None:
+        return
+
     _VIRTUALDRIVER_TRACE_MODE = TraceMode.direct
     property_tracer.internal_prop_trace_index_update(self, context)
+    setattr(vd, 'mute', getattr(block, 'mute'))
     _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
 
 
