@@ -10,9 +10,6 @@ _PROPTRACE_BASE_TYPE: bpy.types.bpy_struct = None
 _PROPTRACE_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context], bpy.types.bpy_struct] = None
 _PROPTRACE_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
 
-
-# properties
-
 _PROPTRACE_ID_TYPE_STR: list[tuple[str, str, str, str, int]] = [
     ('ACTION', 'Action', '', 'ACTION', 17217),
     ('ARMATURE', 'Armature', '', 'ARMATURE_DATA', 21057),
@@ -94,6 +91,7 @@ _PROPTRACE_ID_TYPE_PYTYPE: dict[str, bpy.types.ID] = {
     'WORLD': bpy.types.World,
     'WORKSPACE': bpy.types.WorkSpace,
 }
+
 
 class PropertyTracer(bpy.types.PropertyGroup):
     identifier: Literal['property_tracer'] = 'property_tracer'
@@ -221,6 +219,8 @@ class TraceMode(enum.Enum):
     none: Literal['none'] = 'none'
 
 _PROPTRACE_TRACE_MODE: TraceMode = TraceMode.none
+
+
 def trace(
     pto: Union[PropertyTracer, InternalPropTrace],
     identifier: str,
@@ -283,8 +283,6 @@ def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.ty
     _PROPTRACE_TRACE_MODE = TraceMode.none
 
 
-# operators
-
 class PROPTRACE_OT_add(bpy.types.Operator):
     bl_idname = 'prop_trace.add'
     bl_label = 'add'
@@ -335,9 +333,6 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
         setattr(base, InternalPropTraceIndex.identifier, min(max(0, index), len(ipt)-1))
         return {'FINISHED'}
 
-
-
-# registration
 
 def get_context_block(context: bpy.types.Context) -> Union[tuple[PropertyTracer, list[InternalPropTrace], int, InternalPropTrace], None]:
     base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))

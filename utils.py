@@ -5,7 +5,9 @@ from typing import Any, Callable, Literal, Pattern, Union
 import bpy
 
 
+
 _PROPTRACE_RE_PATH_DISASSEMBLY: Pattern = re.compile(r'''(\[(?:(?P<str>".*?(?<!\\)")|(?P<int>\d+))\])|(?(1)|(?P<path>\w+))''')
+
 
 @dataclass
 class DisassemblyItem:
@@ -27,6 +29,7 @@ class Interpretation:
     prop_path: str
     array_index: Union[int, None]
     prop: bpy.types.Property
+
 
 def path_disassembly(path: str) -> list[DisassemblyItem]:
     res = _PROPTRACE_RE_PATH_DISASSEMBLY.finditer(path)

@@ -6,6 +6,8 @@ from . import utils
 from . import property_tracer
 from . import fcurve_observer
 
+
+
 _VIRTUALDRIVER_BASE_TYPE_ID: bpy.types.ID = None
 _VIRTUALDRIVER_BASE_TYPE_PARENT: bpy.types.bpy_struct = None
 _VIRTUALDRIVER_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context], bpy.types.bpy_struct] = None
@@ -38,6 +40,7 @@ property_tracer.InternalPropTrace.identifier = InternalVirtualDriver.identifier
 property_tracer.InternalPropTraceIndex.identifier = VirtualDriverIndex.identifier
 
 _VIRTUALDRIVER_TRACE_MODE: TraceMode = TraceMode.none
+
 
 def virtual_driver_update(self: VirtualDriver, context: bpy.types.Context, identifier: str):
     global _VIRTUALDRIVER_TRACE_MODE
@@ -79,7 +82,6 @@ def virtual_driver_index_update(self: bpy.types.bpy_struct, context: bpy.types.C
     setattr(vd, 'mute', getattr(block, 'mute'))
     sync_fcurve(block, vd)
     _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
-
 
 
 class VIRTUALDRIVER_OT_add(property_tracer.PROPTRACE_OT_add):
@@ -148,7 +150,6 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
             box.prop(vd, 'prop')
 
 
-
 def get_context_props(
     data: Union[bpy.types.Context, bpy.types.ID]
 ) -> tuple[
@@ -199,6 +200,7 @@ def back_tracer(obj: bpy.types.bpy_struct, name: str, value: Any, array_index: U
         setattr(obj, name, value)
     else:
         getattr(obj, name)[array_index] = value
+
 
 _VIRTUALDRIVER_UPDATE_LOCK: bool = False
 

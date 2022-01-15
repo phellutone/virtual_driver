@@ -2,7 +2,9 @@
 import enum
 from typing import Union
 import bpy
-from .utils import Interpretation, animatable
+from .utils import Interpretation
+
+
 
 class FCurveObserverState(enum.Enum):
     INPUT_ID = 'INPUT_ID'
@@ -19,20 +21,17 @@ class FCurveObserver(bpy.types.PropertyGroup):
         fcurves = get(self.id_data, self.path_from_id('prop'), 0)
         if fcurves is None:
             if self.fcurve:
-                # no fcurve and prop is true so set prop to false, recursive called but nothig do
                 self.fcurve = False
         else:
             if not self.fcurve:
-                # exist fcurve and prop is false so delete fcurve
                 delete(self.id_data, self.path_from_id('prop'), 0)
 
     fcurve: bpy.props.BoolProperty(
         update=fcurve_update
     )
 
-    id: bpy.props.PointerProperty(type=bpy.types.ID)
-    data_path: bpy.props.StringProperty()
     prop: bpy.props.FloatProperty()
+
 
 def parser_for_fcurve(anim: Interpretation) -> Union[tuple[bpy.types.ID, str, int], None]:
     if anim is None:
