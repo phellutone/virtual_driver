@@ -372,7 +372,10 @@ base_access_context = prop_trace_base_access_context
 base_paths = {
     PropertyTracer.identifier: bpy.props.PointerProperty(type=PropertyTracer),
     InternalPropTrace.identifier: bpy.props.CollectionProperty(type=InternalPropTrace),
-    InternalPropTraceIndex.identifier: bpy.props.IntProperty(update=internal_prop_trace_index_update)
+    InternalPropTraceIndex.identifier: bpy.props.IntProperty(
+        name='Active Property Tracer Index',
+        update=internal_prop_trace_index_update
+    )
 }
 
 def preregister(

@@ -33,15 +33,6 @@ class FCurveObserver(bpy.types.PropertyGroup):
     prop: bpy.props.FloatProperty()
 
 
-def parser_for_fcurve(anim: Interpretation) -> Union[tuple[bpy.types.ID, str, int], None]:
-    if anim is None:
-        return
-    return (
-        anim.id,
-        (anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id).path_from_id(anim.prop_path),
-        0 if anim.array_index is None else anim.array_index
-    )
-
 def get(id: bpy.types.ID, data_path: str, array_index: int) -> Union[bpy.types.FCurve, list[bpy.types.FCurve], None]:
     state = observer(id, data_path, array_index)
     if state in (FCurveObserverState.VALID_ONE, FCurveObserverState.VALID_DUPLICATE):

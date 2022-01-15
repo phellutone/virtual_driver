@@ -242,7 +242,10 @@ base_access_id = virtual_driver_base_access_id
 base_paths = {
     VirtualDriver.identifier: bpy.props.PointerProperty(type=VirtualDriver),
     InternalVirtualDriver.identifier: bpy.props.CollectionProperty(type=InternalVirtualDriver),
-    VirtualDriverIndex.identifier: bpy.props.IntProperty(update=virtual_driver_index_update)
+    VirtualDriverIndex.identifier: bpy.props.IntProperty(
+        name='Active Virtual Driver Index',
+        update=virtual_driver_index_update
+    )
 }
 
 def preregister(
