@@ -213,39 +213,24 @@ def virtual_driver_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types
     ids = [id.original for id in ids if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID)]
     for base_id in ids:
         base, vd, ivd, index, block = get_context_props(base_id)
-        if ivd is None:
-            continue
-        for b in ivd:
-            anim = utils.animatable(b.id, b.data_path)
-            if anim is None or b.mute:
-                continue
-            back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, b.prop, anim.array_index)
-    _VIRTUALDRIVER_UPDATE_LOCK = False
-
-    updates: list[bpy.types.DepsgraphUpdate] = depsgraph.updates
-    ids = [u.id.original for u in updates if isinstance(u.id, _VIRTUALDRIVER_BASE_TYPE_ID)]
-    if not ids:
-        return
-
-    _VIRTUALDRIVER_UPDATE_LOCK = True
-    for base_id in ids:
-        base, vd, ivd, index, block = get_context_props(base_id)
-
         if not ivd is None:
             for b in ivd:
                 if b.is_valid:
                     b.fcurve = True
-
         if not vd is None:
             if vd.is_valid:
                 vd.fcurve = True
 
-        if vd is None or block is None:
-            continue
-        if not vd.is_valid or not block.is_valid:
-            continue
+        if not vd is None and not block is None:
+            if vd.is_valid and block.is_valid:
+                sync_fcurve(vd, block)
 
-        sync_fcurve(vd, block)
+        if not ivd is None:
+            for b in ivd:
+                anim = utils.animatable(b.id, b.data_path)
+                if anim is None or b.mute:
+                    continue
+                back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, b.prop, anim.array_index)
     _VIRTUALDRIVER_UPDATE_LOCK = False
 
 base_type_id = bpy.types.Scene
