@@ -88,6 +88,14 @@ class VIRTUALDRIVER_OT_add(property_tracer.PROPTRACE_OT_add):
 class VIRTUALDRIVER_OT_remove(property_tracer.PROPTRACE_OT_remove):
     bl_idname = 'virtual_driver.remove'
 
+    def execute(self, context: bpy.types.Context) -> set[str]:
+        base, vd, ivd, index, block = get_context_props(context)
+        if vd is None or block is None:
+            return {'CANCELLED'}
+        vd.fcurve = False
+        block.fcurve = False
+        return super().execute(context)
+
 
 class OBJECT_UL_VirtualDriver(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index) -> None:
@@ -193,6 +201,8 @@ def back_tracer(obj: bpy.types.bpy_struct, name: str, value: Any, array_index: U
         getattr(obj, name)[array_index] = value
 
 _VIRTUALDRIVER_UPDATE_LOCK: bool = False
+
+@bpy.app.handlers.persistent
 def virtual_driver_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
     global _VIRTUALDRIVER_UPDATE_LOCK
     if _VIRTUALDRIVER_UPDATE_LOCK:
