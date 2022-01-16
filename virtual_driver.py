@@ -272,8 +272,6 @@ classes = (
 )
 
 def register():
-    preregister()
-
     for cls in classes:
         bpy.utils.register_class(cls)
 

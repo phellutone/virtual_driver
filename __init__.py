@@ -4,7 +4,7 @@
 bl_info = {
     'name': 'virtual driver',
     'author': 'phellutone',
-    'version': (0, 2, 0),
+    'version': (0, 2, 1),
     'blender': (2, 93, 0),
     'location': 'View3D > Sidebar > Tool Tab',
     'description': 'virtual driver',
@@ -16,6 +16,7 @@ bl_info = {
 from . import virtual_driver
 
 def register():
+    virtual_driver.preregister()
     virtual_driver.register()
 
 def unregister():
