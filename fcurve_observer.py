@@ -18,13 +18,17 @@ class FCurveObserverState(enum.Enum):
 
 class FCurveObserver(bpy.types.PropertyGroup):
     def fcurve_update(self, context: bpy.types.Context) -> None:
-        fcurves = get(self.id_data, self.path_from_id('prop'), 0)
+        try:
+            path = self.path_from_id('prop')
+        except:
+            return
+        fcurves = get(self.id_data, path, 0)
         if fcurves is None:
             if self.fcurve:
                 self.fcurve = False
         else:
             if not self.fcurve:
-                delete(self.id_data, self.path_from_id('prop'), 0)
+                delete(self.id_data, path, 0)
 
     fcurve: bpy.props.BoolProperty(
         update=fcurve_update
