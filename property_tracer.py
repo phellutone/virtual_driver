@@ -2,7 +2,7 @@
 import enum
 from typing import Any, Callable, Literal, Union
 import bpy
-from .utils import animatable, copy_anim_property, path_recognize
+from . import utils
 
 
 
@@ -99,11 +99,11 @@ class PropertyTracer(bpy.types.PropertyGroup):
     def is_valid_update(self, context: bpy.types.Context) -> None:
         if not self.is_valid:
             return
-        anim = animatable(self.id, self.data_path)
+        anim = utils.animatable(self.id, self.data_path)
         if anim is None:
             self.is_valid = False
             return
-        self.__class__.prop = copy_anim_property(
+        self.__class__.prop = utils.copy_anim_property(
             anim.prop,
             lambda self, context: property_tracer_update(self, context, 'prop')
         )
@@ -115,7 +115,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
 
     def id_type_update(self, context: bpy.types.Context) -> None:
         def id_update(self: PropertyTracer, context: bpy.types.Context) -> None:
-            anim = animatable(self.id, self.data_path)
+            anim = utils.animatable(self.id, self.data_path)
             self.is_valid = not anim is None
             property_tracer_update(self, context, 'id')
 
@@ -129,7 +129,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
         property_tracer_update(self, context, 'id_type')
 
     def data_path_update(self, context: bpy.types.Context) -> None:
-        anim = animatable(self.id, self.data_path)
+        anim = utils.animatable(self.id, self.data_path)
         self.is_valid = not anim is None
         property_tracer_update(self, context, 'data_path')
 
@@ -165,7 +165,7 @@ class InternalPropTrace(bpy.types.PropertyGroup):
     def is_valid_update(self, context: bpy.types.Context) -> None:
         if not self.is_valid:
             return
-        anim = animatable(self.id, self.data_path)
+        anim = utils.animatable(self.id, self.data_path)
         if anim is None:
             self.is_valid = False
             return
@@ -180,12 +180,12 @@ class InternalPropTrace(bpy.types.PropertyGroup):
         internal_prop_trace_update(self, context, 'id_type')
 
     def id_update(self, context: bpy.types.Context) -> None:
-        anim = animatable(self.id, self.data_path)
+        anim = utils.animatable(self.id, self.data_path)
         self.is_valid = not anim is None
         internal_prop_trace_update(self, context, 'id')
 
     def data_path_update(self, context: bpy.types.Context) -> None:
-        anim = animatable(self.id, self.data_path)
+        anim = utils.animatable(self.id, self.data_path)
         self.is_valid = not anim is None
         internal_prop_trace_update(self, context, 'data_path')
 
@@ -391,7 +391,7 @@ def get_props_intern(
         if isinstance(data, bpy.types.ID):
             base = data
         else:
-            ip = path_recognize(data.id_data, data.path_from_id())
+            ip = utils.path_recognize(data.id_data, data.path_from_id())
             if ip is None:
                 return
             base = ip.id.path_resolve(ip.rna_path) if ip.rna_path else ip.id
