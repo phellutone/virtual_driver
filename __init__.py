@@ -1,5 +1,5 @@
 
-# master/develop/
+# master
 
 bl_info = {
     'name': 'virtual driver',
@@ -16,6 +16,7 @@ bl_info = {
 from . import virtual_driver
 
 def register():
+    virtual_driver.preregister()
     virtual_driver.register()
 
 def unregister():
