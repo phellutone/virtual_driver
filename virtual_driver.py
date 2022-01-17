@@ -10,8 +10,8 @@ from . import fcurve_observer
 
 _VIRTUALDRIVER_BASE_TYPE_ID: bpy.types.ID = None
 _VIRTUALDRIVER_BASE_TYPE_PARENT: bpy.types.bpy_struct = None
-_VIRTUALDRIVER_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context], bpy.types.bpy_struct] = None
-_VIRTUALDRIVER_BASE_ACCESS_ID: Callable[[bpy.types.ID], bpy.types.bpy_struct] = None
+_VIRTUALDRIVER_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = None
+_VIRTUALDRIVER_BASE_ACCESS_ID: Callable[[bpy.types.ID, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = None
 _VIRTUALDRIVER_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
 
 
@@ -47,7 +47,10 @@ def virtual_driver_update(self: VirtualDriver, context: bpy.types.Context, ident
     if _VIRTUALDRIVER_TRACE_MODE is TraceMode.direct:
         return
 
-    base, vd, ivd, index, block = get_context_props(context)
+    props = get_props_intern(self)
+    if props is None:
+        return
+    base, vd, ivd, index, block = props
     if block is None:
         return
 
@@ -60,7 +63,10 @@ def internal_virtual_driver_update(self: InternalVirtualDriver, context: bpy.typ
     if _VIRTUALDRIVER_TRACE_MODE is TraceMode.panel:
         return
 
-    base, vd, ivd, index, block = get_context_props(context)
+    props = get_props_intern(self)
+    if props is None:
+        return
+    base, vd, ivd, index, block = props
     if block is None:
         return
 
@@ -73,7 +79,10 @@ def virtual_driver_index_update(self: bpy.types.bpy_struct, context: bpy.types.C
     if _VIRTUALDRIVER_TRACE_MODE is TraceMode.panel:
         return
 
-    base, vd, ivd, index, block = get_context_props(context)
+    props = get_props_intern(self)
+    if props is None:
+        return
+    base, vd, ivd, index, block = props
     if block is None:
         return
 
@@ -91,7 +100,19 @@ class VIRTUALDRIVER_OT_remove(property_tracer.PROPTRACE_OT_remove):
     bl_idname = 'virtual_driver.remove'
 
     def execute(self, context: bpy.types.Context) -> set[str]:
-        base, vd, ivd, index, block = get_context_props(context)
+        props: Union[
+            tuple[
+                Union[bpy.types.bpy_struct, None],
+                Union[VirtualDriver, None],
+                Union[list[InternalVirtualDriver], None],
+                Union[int, None],
+                Union[InternalVirtualDriver, None]
+            ],
+            None
+        ] = get_props_extern(context)
+        if props is None:
+            return {'CANCELLED'}
+        base, vd, ivd, index, block = props
         if vd is None or block is None:
             return {'CANCELLED'}
         vd.fcurve = False
@@ -119,7 +140,19 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
 
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
-        base, vd, ivd, index, block = get_context_props(context)
+        props: Union[
+            tuple[
+                Union[bpy.types.bpy_struct, None],
+                Union[VirtualDriver, None],
+                Union[list[InternalVirtualDriver], None],
+                Union[int, None],
+                Union[InternalVirtualDriver, None]
+            ],
+            None
+        ] = get_props_extern(context)
+        if props is None:
+            return
+        base, vd, ivd, index, block = props
         if base is None:
             return
 
@@ -150,8 +183,8 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
             box.prop(vd, 'prop')
 
 
-def get_context_props(
-    data: Union[bpy.types.Context, bpy.types.ID]
+def get_props_sub(
+    base: bpy.types.bpy_struct
 ) -> tuple[
     Union[bpy.types.bpy_struct, None],
     Union[VirtualDriver, None],
@@ -159,9 +192,6 @@ def get_context_props(
     Union[int, None],
     Union[InternalVirtualDriver, None]
 ]:
-    base = _VIRTUALDRIVER_BASE_ACCESS_CONTEXT(data) if isinstance(data, bpy.types.Context) else _VIRTUALDRIVER_BASE_ACCESS_ID(data)
-    if not isinstance(base, _VIRTUALDRIVER_BASE_TYPE_PARENT):
-        return None, None, None, None, None
     vd: Union[VirtualDriver, None] = getattr(base, VirtualDriver.identifier, None)
     ivd: Union[list[InternalVirtualDriver], None] = getattr(base, InternalVirtualDriver.identifier, None)
     index: Union[int, None] = getattr(base, VirtualDriverIndex.identifier, None)
@@ -170,14 +200,69 @@ def get_context_props(
     block: Union[InternalVirtualDriver, None] = ivd[index] if ivd and index >= 0 else None
     return base, vd, ivd, index, block
 
-def virtual_driver_base_access_context(context: bpy.types.Context) -> Union[bpy.types.bpy_struct, None]:
+def get_props_intern(
+    data: bpy.types.bpy_struct
+) -> Union[
+    tuple[
+        Union[bpy.types.bpy_struct, None],
+        Union[VirtualDriver, None],
+        Union[list[InternalVirtualDriver], None],
+        Union[int, None],
+        Union[InternalVirtualDriver, None]
+    ],
+    None
+]:
+    try:
+        if isinstance(data, bpy.types.ID):
+            base = data
+        else:
+            ip = utils.path_recognize(data.id_data, data.path_from_id())
+            if ip is None:
+                return
+            base = ip.id.path_resolve(ip.rna_path) if ip.rna_path else ip.id
+        return get_props_sub(base)
+    except Exception as _:
+        return
+
+def get_props_extern(
+    data: Union[bpy.types.Context, bpy.types.ID],
+    require_all: bool = False
+) -> Union[
+    tuple[
+        Union[bpy.types.bpy_struct, None],
+        Union[VirtualDriver, None],
+        Union[list[InternalVirtualDriver], None],
+        Union[int, None],
+        Union[InternalVirtualDriver, None]
+    ],
+    list[
+        tuple[
+            Union[bpy.types.bpy_struct, None],
+            Union[VirtualDriver, None],
+            Union[list[InternalVirtualDriver], None],
+            Union[int, None],
+            Union[InternalVirtualDriver, None]
+        ]
+    ],
+    None
+]:
+    base = _VIRTUALDRIVER_BASE_ACCESS_CONTEXT(data, require_all) if isinstance(data, bpy.types.Context) else _VIRTUALDRIVER_BASE_ACCESS_ID(data, require_all)
+    if base is None:
+        return None
+    if not require_all:
+        return get_props_sub(base)
+    else:
+        return [get_props_sub(b) for b in base]
+
+def virtual_driver_base_access_context(context: bpy.types.Context, require_all: bool) -> Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]:
     if isinstance(context, bpy.types.Context):
         if hasattr(context, 'scene'):
-            return getattr(context, 'scene')
+            scene = getattr(context, 'scene')
+            return scene if not require_all else [scene]
 
-def virtual_driver_base_access_id(id: bpy.types.ID) -> Union[bpy.types.bpy_struct, None]:
+def virtual_driver_base_access_id(id: bpy.types.ID, require_all: bool) -> Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]:
     if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID):
-        return id
+        return id if not require_all else [id]
 
 def sync_fcurve(pfrom: Union[VirtualDriver, InternalVirtualDriver], pto: Union[VirtualDriver, InternalVirtualDriver]) -> None:
     if not pfrom.fcurve and not pto.fcurve:
@@ -214,25 +299,40 @@ def virtual_driver_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types
     ids: list[bpy.types.ID] = depsgraph.ids
     ids = [id.original for id in ids if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID)]
     for base_id in ids:
-        base, vd, ivd, index, block = get_context_props(base_id)
-        if not ivd is None:
-            for b in ivd:
-                if b.is_valid:
-                    b.fcurve = True
-        if not vd is None:
-            if vd.is_valid:
-                vd.fcurve = True
+        pli: Union[
+            list[
+                tuple[
+                    Union[bpy.types.bpy_struct, None],
+                    Union[VirtualDriver, None],
+                    Union[list[InternalVirtualDriver], None],
+                    Union[int, None],
+                    Union[InternalVirtualDriver, None]
+                ]
+            ],
+            None
+        ] = get_props_extern(base_id, True)
+        if not pli:
+            continue
+        for props in pli:
+            base, vd, ivd, index, block = props
+            if not ivd is None:
+                for b in ivd:
+                    if b.is_valid:
+                        b.fcurve = True
+            if not vd is None:
+                if vd.is_valid:
+                    vd.fcurve = True
 
-        if not vd is None and not block is None:
-            if vd.is_valid and block.is_valid:
-                sync_fcurve(vd, block)
+            if not vd is None and not block is None:
+                if vd.is_valid and block.is_valid:
+                    sync_fcurve(vd, block)
 
-        if not ivd is None:
-            for b in ivd:
-                anim = utils.animatable(b.id, b.data_path)
-                if anim is None or b.mute:
-                    continue
-                back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, b.prop, anim.array_index)
+            if not ivd is None:
+                for b in ivd:
+                    anim = utils.animatable(b.id, b.data_path)
+                    if anim is None or b.mute:
+                        continue
+                    back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, b.prop, anim.array_index)
     _VIRTUALDRIVER_UPDATE_LOCK = False
 
 base_type_id = bpy.types.Scene
@@ -251,8 +351,8 @@ base_paths = {
 def preregister(
     base_type_id: bpy.types.ID = base_type_id,
     base_type_parent: bpy.types.bpy_struct = base_type_parent,
-    base_access_context: Callable[[bpy.types.Context], bpy.types.bpy_struct] = base_access_context,
-    base_access_id: Callable[[bpy.types.ID], bpy.types.bpy_struct] = base_access_id
+    base_access_context: Callable[[bpy.types.Context, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = base_access_context,
+    base_access_id: Callable[[bpy.types.ID, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = base_access_id
 ) -> None:
     global _VIRTUALDRIVER_BASE_TYPE_ID, _VIRTUALDRIVER_BASE_TYPE_PARENT, _VIRTUALDRIVER_BASE_ACCESS_CONTEXT, _VIRTUALDRIVER_BASE_ACCESS_ID, _VIRTUALDRIVER_BASE_PATHS
     _VIRTUALDRIVER_BASE_TYPE_ID = base_type_id

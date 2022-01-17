@@ -2,12 +2,12 @@
 import enum
 from typing import Any, Callable, Literal, Union
 import bpy
-from .utils import animatable, copy_anim_property
+from .utils import animatable, copy_anim_property, path_recognize
 
 
 
 _PROPTRACE_BASE_TYPE: bpy.types.bpy_struct = None
-_PROPTRACE_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context], bpy.types.bpy_struct] = None
+_PROPTRACE_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = None
 _PROPTRACE_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
 
 _PROPTRACE_ID_TYPE_STR: list[tuple[str, str, str, str, int]] = [
@@ -105,19 +105,19 @@ class PropertyTracer(bpy.types.PropertyGroup):
             return
         self.__class__.prop = copy_anim_property(
             anim.prop,
-            lambda self, context: property_tracer_update(context, 'prop')
+            lambda self, context: property_tracer_update(self, context, 'prop')
         )
         if anim.array_index is None:
             self.prop = getattr(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path)
         else:
             self.prop = getattr(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path)[anim.array_index]
-        property_tracer_update(context, 'is_valid')
+        property_tracer_update(self, context, 'is_valid')
 
     def id_type_update(self, context: bpy.types.Context) -> None:
         def id_update(self: PropertyTracer, context: bpy.types.Context) -> None:
             anim = animatable(self.id, self.data_path)
             self.is_valid = not anim is None
-            property_tracer_update(context, 'id')
+            property_tracer_update(self, context, 'id')
 
         self.id = None
         self.__class__.id = bpy.props.PointerProperty(
@@ -126,15 +126,15 @@ class PropertyTracer(bpy.types.PropertyGroup):
             description='ID-Block that the specific property used can be found drom (id_type property must be set first).',
             update=id_update
         )
-        property_tracer_update(context, 'id_type')
+        property_tracer_update(self, context, 'id_type')
 
     def data_path_update(self, context: bpy.types.Context) -> None:
         anim = animatable(self.id, self.data_path)
         self.is_valid = not anim is None
-        property_tracer_update(context, 'data_path')
+        property_tracer_update(self, context, 'data_path')
 
     name: bpy.props.StringProperty(
-        update=lambda self, context: property_tracer_update(context, 'name')
+        update=lambda self, context: property_tracer_update(self, context, 'name')
     )
     index: bpy.props.IntProperty()
     is_valid: bpy.props.BoolProperty(
@@ -230,15 +230,17 @@ def trace(
 ) -> None:
     setattr(pto, identifier, getattr(pfrom, identifier) if not is_set_value else value)
 
-def property_tracer_update(context: bpy.types.Context, identifier: str) -> None:
+def property_tracer_update(self: PropertyTracer, context: bpy.types.Context, identifier: str) -> None:
     global _PROPTRACE_TRACE_MODE
     if _PROPTRACE_TRACE_MODE is TraceMode.direct:
         return
 
-    props = get_context_block(context)
+    props = get_props_intern(self)
     if props is None:
         return
-    pt, ipt, index, block = props
+    base, pt, ipt, index, block = props
+    if block is None:
+        return
 
     _PROPTRACE_TRACE_MODE = TraceMode.panel
     trace(block, identifier, pt)
@@ -249,10 +251,12 @@ def internal_prop_trace_update(self: InternalPropTrace, context: bpy.types.Conte
     if _PROPTRACE_TRACE_MODE is TraceMode.panel:
         return
 
-    props = get_context_block(context)
+    props = get_props_intern(self)
     if props is None:
         return
-    pt, ipt, index, block = props
+    base, pt, ipt, index, block = props
+    if block is None:
+        return
 
     if not block == self:
         return
@@ -266,10 +270,12 @@ def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.ty
     if _PROPTRACE_TRACE_MODE is TraceMode.panel:
         return
 
-    props = get_context_block(context)
+    props = get_props_intern(self)
     if props is None:
         return
-    pt, ipt, index, block = props
+    base, pt, ipt, index, block = props
+    if block is None:
+        return
 
     temp_id = block.id
 
@@ -290,12 +296,21 @@ class PROPTRACE_OT_add(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context: bpy.types.Context) -> set[str]:
-        base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
+        props: Union[
+            tuple[
+                Union[bpy.types.bpy_struct, None],
+                Union[PropertyTracer, None],
+                Union[list[InternalPropTrace], None],
+                Union[int, None],
+                Union[InternalPropTrace, None]
+            ],
+            None
+        ] = get_props_extern(context)
+        if props is None:
+            return
+        base, pt, ipt, index, block = props
         if base is None:
             return {'CANCELLED'}
-        pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
-        ipt: list[InternalPropTrace] = getattr(base, InternalPropTrace.identifier)
-        index: int = getattr(base, InternalPropTraceIndex.identifier)
 
         block: InternalPropTrace = ipt.add()
         length = len(ipt)
@@ -314,12 +329,21 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context: bpy.types.Context) -> set[str]:
-        base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
+        props: Union[
+            tuple[
+                Union[bpy.types.bpy_struct, None],
+                Union[PropertyTracer, None],
+                Union[list[InternalPropTrace], None],
+                Union[int, None],
+                Union[InternalPropTrace, None]
+            ],
+            None
+        ] = get_props_extern(context)
+        if props is None:
+            return
+        base, pt, ipt, index, block = props
         if base is None:
             return {'CANCELLED'}
-        pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
-        ipt: list[InternalPropTrace] = getattr(base, InternalPropTrace.identifier)
-        index: int = getattr(base, InternalPropTraceIndex.identifier)
         if not ipt or index < 0:
             return {'CANCELLED'}
 
@@ -334,38 +358,83 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
         return {'FINISHED'}
 
 
-def get_context_block(context: bpy.types.Context) -> Union[tuple[PropertyTracer, list[InternalPropTrace], int, InternalPropTrace], None]:
-    base = prop_trace_base_access_check(_PROPTRACE_BASE_ACCESS_CONTEXT(context))
-    if base is None:
-        return
-    pt: PropertyTracer = getattr(base, PropertyTracer.identifier)
-    ipt: list[InternalPropTrace] = getattr(base, InternalPropTrace.identifier)
-    index: int = getattr(base, InternalPropTraceIndex.identifier)
-    if not ipt or index < 0:
-        return
-    block = ipt[index]
-    return (pt, ipt, index, block)
-
-def prop_trace_base_access_check(base: bpy.types.bpy_struct) -> Union[bpy.types.bpy_struct, None]:
-    if not isinstance(base, _PROPTRACE_BASE_TYPE):
-        return
-    if (
-        not hasattr(base, PropertyTracer.identifier) or
-        not hasattr(base, InternalPropTrace.identifier) or
-        not hasattr(base, InternalPropTraceIndex.identifier)
-    ):
-        return
+def get_props_sub(
+    base: bpy.types.bpy_struct
+) -> tuple[
+    Union[bpy.types.bpy_struct, None],
+    Union[PropertyTracer, None],
+    Union[list[InternalPropTrace], None],
+    Union[int, None],
+    Union[InternalPropTrace, None]
+]:
     pt: Union[PropertyTracer, None] = getattr(base, PropertyTracer.identifier, None)
     ipt: Union[list[InternalPropTrace], None] = getattr(base, InternalPropTrace.identifier, None)
     index: Union[int, None] = getattr(base, InternalPropTraceIndex.identifier, None)
-    if pt is None or ipt is None or index is None:
-        return
-    return base
+    if ipt is None or index is None:
+        return base, pt, ipt, index, None
+    block: Union[InternalPropTrace, None] = ipt[index] if ipt and index >= 0 else None
+    return base, pt, ipt, index, block
 
-def prop_trace_base_access_context(context: bpy.types.Context) -> Union[bpy.types.bpy_struct, None]:
+def get_props_intern(
+    data: bpy.types.bpy_struct
+) -> Union[
+    tuple[
+        Union[bpy.types.bpy_struct, None],
+        Union[PropertyTracer, None],
+        Union[list[InternalPropTrace], None],
+        Union[int, None],
+        Union[InternalPropTrace, None]
+    ],
+    None
+]:
+    try:
+        if isinstance(data, bpy.types.ID):
+            base = data
+        else:
+            ip = path_recognize(data.id_data, data.path_from_id())
+            if ip is None:
+                return
+            base = ip.id.path_resolve(ip.rna_path) if ip.rna_path else ip.id
+        return get_props_sub(base)
+    except Exception as _:
+        print(_)
+        return
+
+def get_props_extern(
+    data: bpy.types.Context,
+    require_all: bool = False
+) -> Union[
+    tuple[
+        Union[bpy.types.bpy_struct, None],
+        Union[PropertyTracer, None],
+        Union[list[InternalPropTrace], None],
+        Union[int, None],
+        Union[InternalPropTrace, None]
+    ],
+    list[
+        tuple[
+            Union[bpy.types.bpy_struct, None],
+            Union[PropertyTracer, None],
+            Union[list[InternalPropTrace], None],
+            Union[int, None],
+            Union[InternalPropTrace, None]
+        ]
+    ],
+    None
+]:
+    base = _PROPTRACE_BASE_ACCESS_CONTEXT(data, require_all) if isinstance(data, bpy.types.Context) else None
+    if base is None:
+        return None, None, None, None, None
+    if not require_all:
+        return get_props_sub(base)
+    else:
+        return [get_props_sub(b) for b in base]
+
+def prop_trace_base_access_context(context: bpy.types.Context, require_all: bool) -> Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]:
     if isinstance(context, bpy.types.Context):
         if hasattr(context, 'scene'):
-            return getattr(context, 'scene')
+            scene = getattr(context, 'scene')
+            return scene if not require_all else [scene]
 
 base_type = bpy.types.Scene
 base_access_context = prop_trace_base_access_context
@@ -380,7 +449,7 @@ base_paths = {
 
 def preregister(
     base_type: bpy.types.bpy_struct = base_type,
-    base_access_context: Callable[[bpy.types.Context], bpy.types.bpy_struct] = base_access_context
+    base_access_context: Callable[[bpy.types.Context, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = base_access_context
 ) -> None:
     global _PROPTRACE_BASE_TYPE, _PROPTRACE_BASE_ACCESS_CONTEXT, _PROPTRACE_BASE_PATHS
     _PROPTRACE_BASE_TYPE = base_type
