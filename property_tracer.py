@@ -157,7 +157,7 @@ class PropertyTracer(bpy.types.PropertyGroup):
         update=data_path_update
     )
 
-    prop: bpy.props._PropertyDeferred
+    prop: bpy.props.FloatProperty()
 
 class InternalPropTrace(bpy.types.PropertyGroup):
     identifier: Literal['internal_prop_trace'] = 'internal_prop_trace'
@@ -397,7 +397,6 @@ def get_props_intern(
             base = ip.id.path_resolve(ip.rna_path) if ip.rna_path else ip.id
         return get_props_sub(base)
     except Exception as _:
-        print(_)
         return
 
 def get_props_extern(
@@ -424,7 +423,7 @@ def get_props_extern(
 ]:
     base = _PROPTRACE_BASE_ACCESS_CONTEXT(data, require_all) if isinstance(data, bpy.types.Context) else None
     if base is None:
-        return None, None, None, None, None
+        return None
     if not require_all:
         return get_props_sub(base)
     else:
