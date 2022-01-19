@@ -7,14 +7,15 @@ from . import property_tracer
 from . import fcurve_observer
 
 
-
+# region constants
 _VIRTUALDRIVER_BASE_TYPE_ID: bpy.types.ID = None
 _VIRTUALDRIVER_BASE_TYPE_PARENT: bpy.types.bpy_struct = None
 _VIRTUALDRIVER_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = None
 _VIRTUALDRIVER_BASE_ACCESS_ID: Callable[[bpy.types.ID, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = None
 _VIRTUALDRIVER_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
+# endregion
 
-
+# region property classes
 class VirtualDriver(property_tracer.PropertyTracer, fcurve_observer.FCurveObserver):
     identifier: Literal['virtual_driver'] = 'virtual_driver'
     mute: bpy.props.BoolProperty(
@@ -30,18 +31,21 @@ class InternalVirtualDriver(property_tracer.InternalPropTrace, fcurve_observer.F
 class VirtualDriverIndex(property_tracer.InternalPropTraceIndex):
     identifier: Literal['active_virtual_driver_index'] = 'active_virtual_driver_index'
 
+property_tracer.PropertyTracer.identifier = VirtualDriver.identifier
+property_tracer.InternalPropTrace.identifier = InternalVirtualDriver.identifier
+property_tracer.InternalPropTraceIndex.identifier = VirtualDriverIndex.identifier
+# endregion
+
+# region states
 class TraceMode(enum.Enum):
     direct = property_tracer.TraceMode.direct
     panel = property_tracer.TraceMode.panel
     none = property_tracer.TraceMode.none
 
-property_tracer.PropertyTracer.identifier = VirtualDriver.identifier
-property_tracer.InternalPropTrace.identifier = InternalVirtualDriver.identifier
-property_tracer.InternalPropTraceIndex.identifier = VirtualDriverIndex.identifier
-
 _VIRTUALDRIVER_TRACE_MODE: TraceMode = TraceMode.none
+# endregion
 
-
+# region property callbacks
 def virtual_driver_update(self: VirtualDriver, context: bpy.types.Context, identifier: str):
     global _VIRTUALDRIVER_TRACE_MODE
     if _VIRTUALDRIVER_TRACE_MODE is TraceMode.direct:
@@ -91,8 +95,9 @@ def virtual_driver_index_update(self: bpy.types.bpy_struct, context: bpy.types.C
     setattr(vd, 'mute', getattr(block, 'mute'))
     sync_fcurve(block, vd)
     _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
+# endregion
 
-
+# region operator classes
 class VIRTUALDRIVER_OT_add(property_tracer.PROPTRACE_OT_add):
     bl_idname = 'virtual_driver.add'
 
@@ -118,8 +123,9 @@ class VIRTUALDRIVER_OT_remove(property_tracer.PROPTRACE_OT_remove):
         vd.fcurve = False
         block.fcurve = False
         return super().execute(context)
+# endregion
 
-
+# region panel classes
 class OBJECT_UL_VirtualDriver(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index) -> None:
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
@@ -181,8 +187,9 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
 
         if vd.is_valid:
             box.prop(vd, 'prop')
+# endregion
 
-
+# region property accesses
 def get_props_sub(
     base: bpy.types.bpy_struct
 ) -> tuple[
@@ -253,17 +260,9 @@ def get_props_extern(
         return get_props_sub(base)
     else:
         return [get_props_sub(b) for b in base]
+# endregion
 
-def virtual_driver_base_access_context(context: bpy.types.Context, require_all: bool) -> Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]:
-    if isinstance(context, bpy.types.Context):
-        if hasattr(context, 'scene'):
-            scene = getattr(context, 'scene')
-            return scene if not require_all else [scene]
-
-def virtual_driver_base_access_id(id: bpy.types.ID, require_all: bool) -> Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]:
-    if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID):
-        return id if not require_all else [id]
-
+# region property iterators
 def update_fcurve_iter(
     base: Union[bpy.types.bpy_struct, None],
     vd: Union[VirtualDriver, None],
@@ -383,8 +382,9 @@ def prop_iter(
 
         for iip in id_iter_post:
             iip(base_id)
+# endregion
 
-
+# region handlers
 _VIRTUALDRIVER_UPDATE_LOCK: bool = False
 
 @bpy.app.handlers.persistent
@@ -405,6 +405,18 @@ def virtual_driver_depsgraph_update_post(scene: bpy.types.Scene, depsgraph: bpy.
         ]
     )
     _VIRTUALDRIVER_UPDATE_LOCK = False
+# endregion
+
+# region registration
+def virtual_driver_base_access_context(context: bpy.types.Context, require_all: bool) -> Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]:
+    if isinstance(context, bpy.types.Context):
+        if hasattr(context, 'scene'):
+            scene = getattr(context, 'scene')
+            return scene if not require_all else [scene]
+
+def virtual_driver_base_access_id(id: bpy.types.ID, require_all: bool) -> Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]:
+    if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID):
+        return id if not require_all else [id]
 
 base_type_id = bpy.types.Scene
 base_type_parent = bpy.types.Scene
@@ -461,3 +473,4 @@ def unregister():
 
     if virtual_driver_depsgraph_update_post in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(virtual_driver_depsgraph_update_post)
+# endregion

@@ -5,10 +5,11 @@ from typing import Any, Callable, Literal, Pattern, Union
 import bpy
 
 
-
+# region constants
 _PROPTRACE_RE_PATH_DISASSEMBLY: Pattern = re.compile(r'''(\[(?:(?P<str>".*?(?<!\\)")|(?P<int>\d+))\])|(?(1)|(?P<path>\w+))''')
+# endregion
 
-
+# region dataclasses
 @dataclass
 class DisassemblyItem:
     type: Union[Literal['path'], Literal['int'], Literal['str']]
@@ -29,8 +30,9 @@ class Interpretation:
     prop_path: str
     array_index: Union[int, None]
     prop: bpy.types.Property
+# endregion
 
-
+# region functions
 def path_disassembly(path: str) -> list[DisassemblyItem]:
     res = _PROPTRACE_RE_PATH_DISASSEMBLY.finditer(path)
     result = []
@@ -202,3 +204,4 @@ def copy_anim_property(property: bpy.types.Property, cb: Callable[[Any, bpy.type
                 items=items,
                 update=cb
             )
+# endregion

@@ -5,7 +5,7 @@ import bpy
 from . import utils
 
 
-
+# region constants
 _PROPTRACE_BASE_TYPE: bpy.types.bpy_struct = None
 _PROPTRACE_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = None
 _PROPTRACE_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
@@ -91,8 +91,9 @@ _PROPTRACE_ID_TYPE_PYTYPE: dict[str, bpy.types.ID] = {
     'WORLD': bpy.types.World,
     'WORKSPACE': bpy.types.WorkSpace,
 }
+# endregion
 
-
+# region property classes
 class PropertyTracer(bpy.types.PropertyGroup):
     identifier: Literal['property_tracer'] = 'property_tracer'
 
@@ -212,15 +213,18 @@ class InternalPropTrace(bpy.types.PropertyGroup):
 
 class InternalPropTraceIndex:
     identifier: Literal['active_internal_prop_trace_index'] = 'active_internal_prop_trace_index'
+# endregion
 
+# region states
 class TraceMode(enum.Enum):
     direct: Literal['direct'] = 'direct'
     panel: Literal['panel'] = 'panel'
     none: Literal['none'] = 'none'
 
 _PROPTRACE_TRACE_MODE: TraceMode = TraceMode.none
+# endregion
 
-
+# region property callbacks
 def trace(
     pto: Union[PropertyTracer, InternalPropTrace],
     identifier: str,
@@ -287,8 +291,9 @@ def internal_prop_trace_index_update(self: bpy.types.bpy_struct, context: bpy.ty
     trace(pt, 'data_path', block)
     trace(pt, 'prop', block)
     _PROPTRACE_TRACE_MODE = TraceMode.none
+# endregion
 
-
+# region operator classes
 class PROPTRACE_OT_add(bpy.types.Operator):
     bl_idname = 'prop_trace.add'
     bl_label = 'add'
@@ -356,8 +361,9 @@ class PROPTRACE_OT_remove(bpy.types.Operator):
             b.index -= 1
         setattr(base, InternalPropTraceIndex.identifier, min(max(0, index), len(ipt)-1))
         return {'FINISHED'}
+# endregion
 
-
+# region property accesses
 def get_props_sub(
     base: bpy.types.bpy_struct
 ) -> tuple[
@@ -428,7 +434,9 @@ def get_props_extern(
         return get_props_sub(base)
     else:
         return [get_props_sub(b) for b in base]
+# endregion
 
+# region registration
 def prop_trace_base_access_context(context: bpy.types.Context, require_all: bool) -> Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]:
     if isinstance(context, bpy.types.Context):
         if hasattr(context, 'scene'):
@@ -475,3 +483,4 @@ def unregister():
 
     for identifier in _PROPTRACE_BASE_PATHS:
         delattr(_PROPTRACE_BASE_TYPE, identifier)
+# endregion
