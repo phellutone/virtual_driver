@@ -271,9 +271,10 @@ def sync_fcurve(pfrom: Union[VirtualDriver, InternalVirtualDriver], pto: Union[V
     fcurves = fcurve_observer.get(pfrom.id_data, pfrom.path_from_id('prop'), 0)
     if fcurves is None:
         pfrom.fcurve = False
+        pto.fcurve = False
         return
     if isinstance(fcurves, list):
-        return
+        raise Exception('fcurve duplicated')
     anim_data: bpy.types.AnimData = getattr(pto.id_data, 'animation_data')
     anim_data_drivers: bpy.types.AnimDataDrivers = anim_data.drivers
     fcopy = anim_data_drivers.from_existing(src_driver=fcurves)
