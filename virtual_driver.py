@@ -185,9 +185,6 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
 
         if vd.is_valid:
             box.prop(vd, 'prop')
-
-            vd.fcurve = True
-
 # endregion
 
 # region property accesses
