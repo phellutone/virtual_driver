@@ -179,14 +179,15 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
         if not ivd or index < 0:
             return
 
-        block = ivd[index]
-
         box = layout.box().column()
         box.template_any_ID(vd, 'id', 'id_type', text='Prop:')
         box.template_path_builder(vd, 'data_path', vd.id, text='Path')
 
         if vd.is_valid:
             box.prop(vd, 'prop')
+
+            vd.fcurve = True
+
 # endregion
 
 # region property accesses
