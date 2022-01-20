@@ -2,20 +2,9 @@
 import enum
 from typing import Union
 import bpy
-from .utils import Interpretation
 
 
-
-class FCurveObserverState(enum.Enum):
-    INPUT_ID = 'INPUT_ID'
-    INPUT_DATA_PATH = 'INPUT_DATA_PATH'
-    INPUT_ARRAY_INDEX = 'INPUT_ARRAY_INDEX'
-    ANIMATION_DATA = 'ANIMATION_DATA'
-    DATA_PATH = 'DATA_PATH'
-    ARRAY_INDEX = 'ARRAY_INDEX'
-    VALID_DUPLICATE = 'VALID_DUPLICATE'
-    VALID_ONE = 'VALID_ONE'
-
+# region property classes
 class FCurveObserver(bpy.types.PropertyGroup):
     def fcurve_update(self, context: bpy.types.Context) -> None:
         try:
@@ -35,7 +24,18 @@ class FCurveObserver(bpy.types.PropertyGroup):
     )
 
     prop: bpy.props.FloatProperty()
+# endregion
 
+# region fcurve
+class FCurveObserverState(enum.Enum):
+    INPUT_ID = 'INPUT_ID'
+    INPUT_DATA_PATH = 'INPUT_DATA_PATH'
+    INPUT_ARRAY_INDEX = 'INPUT_ARRAY_INDEX'
+    ANIMATION_DATA = 'ANIMATION_DATA'
+    DATA_PATH = 'DATA_PATH'
+    ARRAY_INDEX = 'ARRAY_INDEX'
+    VALID_DUPLICATE = 'VALID_DUPLICATE'
+    VALID_ONE = 'VALID_ONE'
 
 def get(id: bpy.types.ID, data_path: str, array_index: int) -> Union[bpy.types.FCurve, list[bpy.types.FCurve], None]:
     state = observer(id, data_path, array_index)
@@ -88,3 +88,4 @@ def observer(id: bpy.types.ID, data_path: str, array_index: int) -> FCurveObserv
     if len(ifcurves) > 1:
         return FCurveObserverState.VALID_DUPLICATE
     return FCurveObserverState.VALID_ONE
+# endregion

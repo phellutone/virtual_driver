@@ -7,14 +7,15 @@ from . import property_tracer
 from . import fcurve_observer
 
 
-
+# region constants
 _VIRTUALDRIVER_BASE_TYPE_ID: bpy.types.ID = None
 _VIRTUALDRIVER_BASE_TYPE_PARENT: bpy.types.bpy_struct = None
-_VIRTUALDRIVER_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context], bpy.types.bpy_struct] = None
-_VIRTUALDRIVER_BASE_ACCESS_ID: Callable[[bpy.types.ID], bpy.types.bpy_struct] = None
+_VIRTUALDRIVER_BASE_ACCESS_CONTEXT: Callable[[bpy.types.Context, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = None
+_VIRTUALDRIVER_BASE_ACCESS_ID: Callable[[bpy.types.ID, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = None
 _VIRTUALDRIVER_BASE_PATHS: dict[str, bpy.props._PropertyDeferred] = dict()
+# endregion
 
-
+# region property classes
 class VirtualDriver(property_tracer.PropertyTracer, fcurve_observer.FCurveObserver):
     identifier: Literal['virtual_driver'] = 'virtual_driver'
     mute: bpy.props.BoolProperty(
@@ -30,24 +31,30 @@ class InternalVirtualDriver(property_tracer.InternalPropTrace, fcurve_observer.F
 class VirtualDriverIndex(property_tracer.InternalPropTraceIndex):
     identifier: Literal['active_virtual_driver_index'] = 'active_virtual_driver_index'
 
+property_tracer.PropertyTracer.identifier = VirtualDriver.identifier
+property_tracer.InternalPropTrace.identifier = InternalVirtualDriver.identifier
+property_tracer.InternalPropTraceIndex.identifier = VirtualDriverIndex.identifier
+# endregion
+
+# region states
 class TraceMode(enum.Enum):
     direct = property_tracer.TraceMode.direct
     panel = property_tracer.TraceMode.panel
     none = property_tracer.TraceMode.none
 
-property_tracer.PropertyTracer.identifier = VirtualDriver.identifier
-property_tracer.InternalPropTrace.identifier = InternalVirtualDriver.identifier
-property_tracer.InternalPropTraceIndex.identifier = VirtualDriverIndex.identifier
-
 _VIRTUALDRIVER_TRACE_MODE: TraceMode = TraceMode.none
+# endregion
 
-
+# region property callbacks
 def virtual_driver_update(self: VirtualDriver, context: bpy.types.Context, identifier: str):
     global _VIRTUALDRIVER_TRACE_MODE
     if _VIRTUALDRIVER_TRACE_MODE is TraceMode.direct:
         return
 
-    base, vd, ivd, index, block = get_context_props(context)
+    props = get_props_intern(self)
+    if props is None:
+        return
+    base, vd, ivd, index, block = props
     if block is None:
         return
 
@@ -60,7 +67,10 @@ def internal_virtual_driver_update(self: InternalVirtualDriver, context: bpy.typ
     if _VIRTUALDRIVER_TRACE_MODE is TraceMode.panel:
         return
 
-    base, vd, ivd, index, block = get_context_props(context)
+    props = get_props_intern(self)
+    if props is None:
+        return
+    base, vd, ivd, index, block = props
     if block is None:
         return
 
@@ -73,7 +83,10 @@ def virtual_driver_index_update(self: bpy.types.bpy_struct, context: bpy.types.C
     if _VIRTUALDRIVER_TRACE_MODE is TraceMode.panel:
         return
 
-    base, vd, ivd, index, block = get_context_props(context)
+    props = get_props_intern(self)
+    if props is None:
+        return
+    base, vd, ivd, index, block = props
     if block is None:
         return
 
@@ -82,8 +95,9 @@ def virtual_driver_index_update(self: bpy.types.bpy_struct, context: bpy.types.C
     setattr(vd, 'mute', getattr(block, 'mute'))
     sync_fcurve(block, vd)
     _VIRTUALDRIVER_TRACE_MODE = TraceMode.none
+# endregion
 
-
+# region operator classes
 class VIRTUALDRIVER_OT_add(property_tracer.PROPTRACE_OT_add):
     bl_idname = 'virtual_driver.add'
 
@@ -91,14 +105,27 @@ class VIRTUALDRIVER_OT_remove(property_tracer.PROPTRACE_OT_remove):
     bl_idname = 'virtual_driver.remove'
 
     def execute(self, context: bpy.types.Context) -> set[str]:
-        base, vd, ivd, index, block = get_context_props(context)
+        props: Union[
+            tuple[
+                Union[bpy.types.bpy_struct, None],
+                Union[VirtualDriver, None],
+                Union[list[InternalVirtualDriver], None],
+                Union[int, None],
+                Union[InternalVirtualDriver, None]
+            ],
+            None
+        ] = get_props_extern(context)
+        if props is None:
+            return {'CANCELLED'}
+        base, vd, ivd, index, block = props
         if vd is None or block is None:
             return {'CANCELLED'}
         vd.fcurve = False
         block.fcurve = False
         return super().execute(context)
+# endregion
 
-
+# region panel classes
 class OBJECT_UL_VirtualDriver(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index) -> None:
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
@@ -119,7 +146,19 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
 
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
-        base, vd, ivd, index, block = get_context_props(context)
+        props: Union[
+            tuple[
+                Union[bpy.types.bpy_struct, None],
+                Union[VirtualDriver, None],
+                Union[list[InternalVirtualDriver], None],
+                Union[int, None],
+                Union[InternalVirtualDriver, None]
+            ],
+            None
+        ] = get_props_extern(context)
+        if props is None:
+            return
+        base, vd, ivd, index, block = props
         if base is None:
             return
 
@@ -140,8 +179,6 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
         if not ivd or index < 0:
             return
 
-        block = ivd[index]
-
         box = layout.box().column()
         box.template_any_ID(vd, 'id', 'id_type', text='Prop:')
         box.template_path_builder(vd, 'data_path', vd.id, text='Path')
@@ -149,9 +186,13 @@ class OBJECT_PT_VirtualDriver(bpy.types.Panel):
         if vd.is_valid:
             box.prop(vd, 'prop')
 
+            vd.fcurve = True
 
-def get_context_props(
-    data: Union[bpy.types.Context, bpy.types.ID]
+# endregion
+
+# region property accesses
+def get_props_sub(
+    base: bpy.types.bpy_struct
 ) -> tuple[
     Union[bpy.types.bpy_struct, None],
     Union[VirtualDriver, None],
@@ -159,9 +200,6 @@ def get_context_props(
     Union[int, None],
     Union[InternalVirtualDriver, None]
 ]:
-    base = _VIRTUALDRIVER_BASE_ACCESS_CONTEXT(data) if isinstance(data, bpy.types.Context) else _VIRTUALDRIVER_BASE_ACCESS_ID(data)
-    if not isinstance(base, _VIRTUALDRIVER_BASE_TYPE_PARENT):
-        return None, None, None, None, None
     vd: Union[VirtualDriver, None] = getattr(base, VirtualDriver.identifier, None)
     ivd: Union[list[InternalVirtualDriver], None] = getattr(base, InternalVirtualDriver.identifier, None)
     index: Union[int, None] = getattr(base, VirtualDriverIndex.identifier, None)
@@ -170,14 +208,76 @@ def get_context_props(
     block: Union[InternalVirtualDriver, None] = ivd[index] if ivd and index >= 0 else None
     return base, vd, ivd, index, block
 
-def virtual_driver_base_access_context(context: bpy.types.Context) -> Union[bpy.types.bpy_struct, None]:
-    if isinstance(context, bpy.types.Context):
-        if hasattr(context, 'scene'):
-            return getattr(context, 'scene')
+def get_props_intern(
+    data: bpy.types.bpy_struct
+) -> Union[
+    tuple[
+        Union[bpy.types.bpy_struct, None],
+        Union[VirtualDriver, None],
+        Union[list[InternalVirtualDriver], None],
+        Union[int, None],
+        Union[InternalVirtualDriver, None]
+    ],
+    None
+]:
+    try:
+        if isinstance(data, bpy.types.ID):
+            base = data
+        else:
+            ip = utils.path_recognize(data.id_data, data.path_from_id())
+            if ip is None:
+                return
+            base = ip.id.path_resolve(ip.rna_path) if ip.rna_path else ip.id
+        return get_props_sub(base)
+    except Exception as _:
+        return
 
-def virtual_driver_base_access_id(id: bpy.types.ID) -> Union[bpy.types.bpy_struct, None]:
-    if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID):
-        return id
+def get_props_extern(
+    data: Union[bpy.types.Context, bpy.types.ID],
+    require_all: bool = False
+) -> Union[
+    tuple[
+        Union[bpy.types.bpy_struct, None],
+        Union[VirtualDriver, None],
+        Union[list[InternalVirtualDriver], None],
+        Union[int, None],
+        Union[InternalVirtualDriver, None]
+    ],
+    list[
+        tuple[
+            Union[bpy.types.bpy_struct, None],
+            Union[VirtualDriver, None],
+            Union[list[InternalVirtualDriver], None],
+            Union[int, None],
+            Union[InternalVirtualDriver, None]
+        ]
+    ],
+    None
+]:
+    base = _VIRTUALDRIVER_BASE_ACCESS_CONTEXT(data, require_all) if isinstance(data, bpy.types.Context) else _VIRTUALDRIVER_BASE_ACCESS_ID(data, require_all)
+    if base is None:
+        return None
+    if not require_all:
+        return get_props_sub(base)
+    else:
+        return [get_props_sub(b) for b in base]
+# endregion
+
+# region property iterators
+def update_fcurve_iter(
+    base: Union[bpy.types.bpy_struct, None],
+    vd: Union[VirtualDriver, None],
+    ivd: Union[list[InternalVirtualDriver], None],
+    index: Union[int, None],
+    block: Union[InternalVirtualDriver, None]
+) -> None:
+    if not ivd is None:
+        for b in ivd:
+            if b.is_valid:
+                b.fcurve = True
+    if not vd is None:
+        if vd.is_valid:
+            vd.fcurve = True
 
 def sync_fcurve(pfrom: Union[VirtualDriver, InternalVirtualDriver], pto: Union[VirtualDriver, InternalVirtualDriver]) -> None:
     if not pfrom.fcurve and not pto.fcurve:
@@ -186,14 +286,26 @@ def sync_fcurve(pfrom: Union[VirtualDriver, InternalVirtualDriver], pto: Union[V
     fcurves = fcurve_observer.get(pfrom.id_data, pfrom.path_from_id('prop'), 0)
     if fcurves is None:
         pfrom.fcurve = False
+        pto.fcurve = False
         return
     if isinstance(fcurves, list):
-        return
+        raise Exception('fcurve duplicated')
     anim_data: bpy.types.AnimData = getattr(pto.id_data, 'animation_data')
     anim_data_drivers: bpy.types.AnimDataDrivers = anim_data.drivers
     fcopy = anim_data_drivers.from_existing(src_driver=fcurves)
     fcopy.data_path = pto.path_from_id('prop')
     pto.fcurve = True
+
+def sync_fcurve_iter(
+    base: Union[bpy.types.bpy_struct, None],
+    vd: Union[VirtualDriver, None],
+    ivd: Union[list[InternalVirtualDriver], None],
+    index: Union[int, None],
+    block: Union[InternalVirtualDriver, None]
+) -> None:
+    if not vd is None and not block is None:
+        if vd.is_valid and block.is_valid:
+            sync_fcurve(vd, block)
 
 def back_tracer(obj: bpy.types.bpy_struct, name: str, value: Any, array_index: Union[int, None]) -> None:
     if array_index is None:
@@ -201,11 +313,83 @@ def back_tracer(obj: bpy.types.bpy_struct, name: str, value: Any, array_index: U
     else:
         getattr(obj, name)[array_index] = value
 
+def back_tracer_iter(
+    base: Union[bpy.types.bpy_struct, None],
+    vd: Union[VirtualDriver, None],
+    ivd: Union[list[InternalVirtualDriver], None],
+    index: Union[int, None],
+    block: Union[InternalVirtualDriver, None]
+) -> None:
+    if not ivd is None:
+        for b in ivd:
+            anim = utils.animatable(b.id, b.data_path)
+            if anim is None or b.mute:
+                continue
+            back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, b.prop, anim.array_index)
 
+def prop_iter(
+    ids: list[bpy.types.ID],
+    id_iter_pre: list[
+        Callable[
+            [
+                bpy.types.ID
+            ],
+            None
+        ]
+    ] = [lambda _: None],
+    id_iter_post: list[
+            Callable[
+            [
+                bpy.types.ID
+            ],
+            None
+        ]
+    ] = [lambda _: None],
+    prop_iter: list[
+        Callable[
+            [
+                Union[bpy.types.bpy_struct, None],
+                Union[VirtualDriver, None],
+                Union[list[InternalVirtualDriver], None],
+                Union[int, None],
+                Union[InternalVirtualDriver, None]
+            ],
+            None
+        ]
+    ] = [lambda _: None]
+) -> None:
+    for base_id in ids:
+        pli: Union[
+            list[
+                tuple[
+                    Union[bpy.types.bpy_struct, None],
+                    Union[VirtualDriver, None],
+                    Union[list[InternalVirtualDriver], None],
+                    Union[int, None],
+                    Union[InternalVirtualDriver, None]
+                ]
+            ],
+            None
+        ] = get_props_extern(base_id, True)
+        if pli is None:
+            continue
+
+        for iip in id_iter_pre:
+            iip(base_id)
+
+        for props in pli:
+            for pi in prop_iter:
+                pi(*props)
+
+        for iip in id_iter_post:
+            iip(base_id)
+# endregion
+
+# region handlers
 _VIRTUALDRIVER_UPDATE_LOCK: bool = False
 
 @bpy.app.handlers.persistent
-def virtual_driver_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
+def virtual_driver_depsgraph_update_post(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
     global _VIRTUALDRIVER_UPDATE_LOCK
     if _VIRTUALDRIVER_UPDATE_LOCK:
         return
@@ -213,27 +397,27 @@ def virtual_driver_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types
     _VIRTUALDRIVER_UPDATE_LOCK = True
     ids: list[bpy.types.ID] = depsgraph.ids
     ids = [id.original for id in ids if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID)]
-    for base_id in ids:
-        base, vd, ivd, index, block = get_context_props(base_id)
-        if not ivd is None:
-            for b in ivd:
-                if b.is_valid:
-                    b.fcurve = True
-        if not vd is None:
-            if vd.is_valid:
-                vd.fcurve = True
-
-        if not vd is None and not block is None:
-            if vd.is_valid and block.is_valid:
-                sync_fcurve(vd, block)
-
-        if not ivd is None:
-            for b in ivd:
-                anim = utils.animatable(b.id, b.data_path)
-                if anim is None or b.mute:
-                    continue
-                back_tracer(anim.id.path_resolve(anim.rna_path) if anim.rna_path else anim.id, anim.prop_path, b.prop, anim.array_index)
+    prop_iter(
+        ids,
+        prop_iter=[
+            update_fcurve_iter,
+            sync_fcurve_iter,
+            back_tracer_iter
+        ]
+    )
     _VIRTUALDRIVER_UPDATE_LOCK = False
+# endregion
+
+# region registration
+def virtual_driver_base_access_context(context: bpy.types.Context, require_all: bool) -> Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]:
+    if isinstance(context, bpy.types.Context):
+        if hasattr(context, 'scene'):
+            scene = getattr(context, 'scene')
+            return scene if not require_all else [scene]
+
+def virtual_driver_base_access_id(id: bpy.types.ID, require_all: bool) -> Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]:
+    if isinstance(id, _VIRTUALDRIVER_BASE_TYPE_ID):
+        return id if not require_all else [id]
 
 base_type_id = bpy.types.Scene
 base_type_parent = bpy.types.Scene
@@ -251,8 +435,8 @@ base_paths = {
 def preregister(
     base_type_id: bpy.types.ID = base_type_id,
     base_type_parent: bpy.types.bpy_struct = base_type_parent,
-    base_access_context: Callable[[bpy.types.Context], bpy.types.bpy_struct] = base_access_context,
-    base_access_id: Callable[[bpy.types.ID], bpy.types.bpy_struct] = base_access_id
+    base_access_context: Callable[[bpy.types.Context, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = base_access_context,
+    base_access_id: Callable[[bpy.types.ID, bool], Union[bpy.types.bpy_struct, list[bpy.types.bpy_struct], None]] = base_access_id
 ) -> None:
     global _VIRTUALDRIVER_BASE_TYPE_ID, _VIRTUALDRIVER_BASE_TYPE_PARENT, _VIRTUALDRIVER_BASE_ACCESS_CONTEXT, _VIRTUALDRIVER_BASE_ACCESS_ID, _VIRTUALDRIVER_BASE_PATHS
     _VIRTUALDRIVER_BASE_TYPE_ID = base_type_id
@@ -278,8 +462,8 @@ def register():
     for identifier in _VIRTUALDRIVER_BASE_PATHS:
         setattr(_VIRTUALDRIVER_BASE_TYPE_PARENT, identifier, _VIRTUALDRIVER_BASE_PATHS[identifier])
 
-    if not virtual_driver_depsgraph_update in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.append(virtual_driver_depsgraph_update)
+    if not virtual_driver_depsgraph_update_post in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(virtual_driver_depsgraph_update_post)
 
 def unregister():
     for cls in classes:
@@ -288,5 +472,6 @@ def unregister():
     for identifier in _VIRTUALDRIVER_BASE_PATHS:
         delattr(_VIRTUALDRIVER_BASE_TYPE_PARENT, identifier)
 
-    if virtual_driver_depsgraph_update in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.remove(virtual_driver_depsgraph_update)
+    if virtual_driver_depsgraph_update_post in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(virtual_driver_depsgraph_update_post)
+# endregion
