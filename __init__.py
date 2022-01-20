@@ -1,5 +1,5 @@
 
-# master/develop/feature/multi-base-access
+# master/develop/
 
 bl_info = {
     'name': 'virtual driver',
